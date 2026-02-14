@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://img.icons8.com/fluency/96/storytelling.png" alt="StoryWeaver Logo" width="100" />
+  <img src="docs/images/logo.png" alt="StoryWeaver Logo" width="100" />
   <h1>StoryWeaver</h1>
   <p><strong>AI 驱动的长篇小说辅助创作系统</strong></p>
   <p>RAG (检索增强生成) · 分层大纲 · 自动摘要 · 流式写作</p>
