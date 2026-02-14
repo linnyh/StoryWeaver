@@ -1,3 +1,4 @@
+
 import asyncio
 import json
 import re
@@ -11,6 +12,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Character, Scene
 from app.rag import rag_service
 from app.config import settings
+
+
+class Assistant:
+    """AI 助手"""
+
+    def __init__(self, llm: "LLMClient"):
+        self.llm = llm
+
+    async def chat_stream(self, message: str, context: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """与 AI 助手对话（流式）"""
+        
+        system_prompt = """你是一个专业的长篇小说写作助手。
+你的任务是帮助作者完善小说内容、提供创意、检查逻辑漏洞或润色文字。
+请用专业、鼓励且简洁的语气回答。
+如果用户要求润色，请提供修改后的版本并说明理由。
+"""
+        
+        user_prompt = f"{message}"
+        if context:
+            user_prompt += f"\n\n【当前上下文参考】\n{context}"
+
+        prompt = f"{system_prompt}\n\n用户：{user_prompt}"
+
+        async for chunk in self.llm.generate_stream(prompt):
+            yield chunk
 
 
 class OpenAICompatClient:
@@ -107,13 +133,35 @@ class LLMClient:
         self.model = settings.openai_model
 
         self.client = None
+        self._init_client()
 
+    def _init_client(self):
         if self.api_key and self.base_url:
             self.client = OpenAICompatClient(
                 api_key=self.api_key,
                 base_url=self.base_url,
                 model=self.model
             )
+        else:
+            self.client = None
+
+    async def refresh_config(self, db: AsyncSession):
+        """从数据库刷新配置"""
+        from app.models.system import SystemConfig
+        
+        stmt = select(SystemConfig).where(SystemConfig.key.in_([
+            "openai_api_key", "openai_base_url", "openai_model"
+        ]))
+        result = await db.execute(stmt)
+        configs = {row.key: row.value for row in result.scalars().all()}
+        
+        # 优先使用数据库配置，否则回退到环境变量
+        self.api_key = configs.get("openai_api_key") or settings.openai_api_key or settings.minimax_api_key
+        self.base_url = configs.get("openai_base_url") or settings.openai_base_url or settings.minimax_base_url
+        self.model = configs.get("openai_model") or settings.openai_model
+        
+        self._init_client()
+        print(f"LLM Client refreshed with model: {self.model}, base_url: {self.base_url}")
 
     async def generate(self, prompt: str) -> str:
         """同步生成文本"""
@@ -469,7 +517,7 @@ class SceneGenerator:
                  summaries.append(s['summary'])
             # 针对 MockScene
             elif hasattr(s, 'summary'): 
-                 summaries.append(s.summary)
+                summaries.append(s.summary)
         
         context["prev_summaries"] = summaries
         print(f"DEBUG: Final context summaries: {summaries}")
@@ -555,3 +603,4 @@ llm_client = LLMClient()
 outline_generator = OutlineGenerator(llm_client)
 scene_generator = SceneGenerator(llm_client)
 summarizer = Summarizer(llm_client)
+assistant = Assistant(llm_client)

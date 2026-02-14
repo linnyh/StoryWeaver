@@ -20,6 +20,11 @@ const routes = [
     path: '/write/:sceneId',
     name: 'Writer',
     component: () => import('@/views/WriterPage.vue')
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('@/views/SettingsPage.vue')
   }
 ]
 

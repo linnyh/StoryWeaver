@@ -1,112 +1,146 @@
 <template>
-  <div class="writer-page">
-    <el-row :gutter="20">
-      <!-- 左侧：上下文 -->
-      <el-col :span="4">
-        <el-card class="context-card">
-          <template #header>
-            <span>上下文</span>
-          </template>
+  <div class="h-full p-4 grid grid-cols-12 gap-4">
+    <!-- Left: Context -->
+    <div class="col-span-3 flex flex-col glass-panel rounded-2xl overflow-hidden">
+      <div class="p-4 border-b border-white/5 bg-space-900/50 backdrop-blur-xl">
+        <h3 class="font-display text-white font-medium tracking-wide flex items-center gap-2">
+          <el-icon class="text-neon-blue"><Document /></el-icon>
+          Context
+        </h3>
+      </div>
 
-          <div class="context-section">
-            <h4>前情提要</h4>
-            <div class="context-content">
-              {{ prevSummary || '暂无前情提要' }}
+      <div class="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-6">
+        <div class="space-y-2">
+          <h4 class="text-xs uppercase tracking-wider text-gray-500 font-bold">Previous Summary</h4>
+          <div class="text-sm text-gray-300 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
+            {{ prevSummary || 'No summary available' }}
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="text-xs uppercase tracking-wider text-gray-500 font-bold">Scene Directives</h4>
+          <div class="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
+            <div class="flex items-center gap-2 text-neon-blue text-sm font-medium">
+              <el-icon><Location /></el-icon>
+              <span>{{ currentScene?.location || 'Unspecified Location' }}</span>
+            </div>
+            <div class="text-sm text-gray-300 leading-relaxed">
+              {{ currentScene?.beat_description || 'No directives' }}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
 
-          <div class="context-section">
-            <h4>场景指令</h4>
-            <div class="context-content">
-              <div class="location">
-                <el-icon><Location /></el-icon>
-                {{ currentScene?.location || '未指定' }}
-              </div>
-              <div class="beat">
-                {{ currentScene?.beat_description || '暂无指令' }}
-              </div>
-            </div>
+    <!-- Center: Editor -->
+    <div class="col-span-6 flex flex-col glass-panel rounded-2xl overflow-hidden relative">
+      <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50 backdrop-blur-xl z-10">
+        <div class="flex items-center gap-3">
+          <button @click="goBack" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
+            <el-icon><ArrowLeft /></el-icon>
+          </button>
+          <span class="font-display text-white font-bold truncate max-w-[200px]">
+            {{ currentScene?.location || 'Writing Mode' }}
+          </span>
+          <div v-if="saving" class="text-xs text-gray-500 flex items-center gap-1 animate-pulse">
+            <el-icon><Loading /></el-icon> Saving...
           </div>
-        </el-card>
-      </el-col>
+        </div>
+        
+        <div class="flex items-center gap-2">
+          <button 
+            @click="handleGenerate" 
+            :disabled="!currentScene || generating"
+            class="px-3 py-1.5 rounded-lg bg-neon-purple/10 hover:bg-neon-purple/20 border border-neon-purple/20 text-xs font-medium text-neon-purple transition-colors disabled:opacity-50 flex items-center gap-1"
+          >
+            <el-icon :class="{ 'animate-spin': generating }"><MagicStick /></el-icon>
+            {{ generating ? 'Writing...' : 'AI Continue' }}
+          </button>
+          
+          <button 
+            @click="handleSave" 
+            :disabled="saving"
+            class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-xs font-medium text-gray-300 transition-colors disabled:opacity-50"
+          >
+            Save
+          </button>
+          
+          <button 
+            @click="handleApprove"
+            class="px-3 py-1.5 rounded-lg bg-neon-green/10 hover:bg-neon-green/20 border border-neon-green/20 text-xs font-medium text-neon-green transition-colors"
+          >
+            Approve
+          </button>
+        </div>
+      </div>
 
-      <!-- 中间：编辑器 -->
-      <el-col :span="14">
-        <el-card class="editor-card">
-          <template #header>
-            <div class="editor-header">
-              <div class="header-left">
-                 <el-button link @click="goBack">
-                   <el-icon><ArrowLeft /></el-icon>
-                   返回
-                 </el-button>
-                 <span class="scene-title">{{ currentScene?.location || '写作模式' }}</span>
-              </div>
-              <div class="header-actions">
-                <el-button
-                  type="primary"
-                  @click="handleGenerate"
-                  :loading="generating"
-                  :disabled="!currentScene"
-                >
-                  <el-icon><MagicStick /></el-icon>
-                  AI 续写
-                </el-button>
-                <el-button @click="handleSave" :loading="saving">
-                  保存
-                </el-button>
-                <el-button type="success" @click="handleApprove">
-                  确认
-                </el-button>
-              </div>
+      <div class="flex-1 overflow-hidden bg-space-950/30 relative">
+        <TiptapEditor
+          v-model="content"
+          :editable="true"
+          @update:modelValue="handleContentChange"
+          class="h-full"
+        />
+      </div>
+    </div>
+
+    <!-- Right: Assistant -->
+    <div class="col-span-3 flex flex-col glass-panel rounded-2xl overflow-hidden">
+      <div class="p-4 border-b border-white/5 bg-space-900/50 backdrop-blur-xl">
+        <h3 class="font-display text-white font-medium tracking-wide flex items-center gap-2">
+          <el-icon class="text-neon-pink"><ChatDotRound /></el-icon>
+          AI Assistant
+        </h3>
+      </div>
+
+      <div class="flex-1 flex flex-col overflow-hidden relative">
+        <div class="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4" ref="chatContainer">
+          <div v-if="chatMessages.length === 0" class="text-center py-8 text-gray-500 text-xs">
+            Ask me to refine text, suggest ideas, or check consistency.
+          </div>
+          
+          <div
+            v-for="(msg, index) in chatMessages"
+            :key="index"
+            class="flex flex-col max-w-[90%]"
+            :class="msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'"
+          >
+            <div 
+              class="px-3 py-2 rounded-xl text-sm leading-relaxed"
+              :class="msg.role === 'user' ? 'bg-neon-blue/20 text-white rounded-br-none border border-neon-blue/20' : 'bg-white/10 text-gray-200 rounded-bl-none border border-white/5'"
+            >
+              {{ msg.content }}
             </div>
-          </template>
+            <span class="text-[10px] text-gray-600 mt-1 px-1">
+              {{ msg.role === 'user' ? 'You' : 'AI' }}
+            </span>
+          </div>
+        </div>
 
-          <div class="editor-container">
-            <TiptapEditor
-              v-model="content"
-              :editable="true"
-              @update:modelValue="handleContentChange"
+        <div class="p-3 border-t border-white/5 bg-space-900/30">
+          <div class="relative">
+            <el-input
+              v-model="chatInput"
+              type="textarea"
+              :rows="2"
+              placeholder="Type instructions..."
+              @keydown.enter.ctrl.prevent="handleSendChat"
+              class="glass-input-override mb-2"
+              resize="none"
             />
+            <button 
+              @click="handleSendChat"
+              class="absolute bottom-3 right-2 p-1.5 rounded-lg bg-neon-blue/20 text-neon-blue hover:bg-neon-blue/30 transition-colors"
+            >
+              <el-icon><Position /></el-icon>
+            </button>
           </div>
-        </el-card>
-      </el-col>
-
-      <!-- 右侧：助手 -->
-      <el-col :span="6">
-        <el-card class="assistant-card">
-          <template #header>
-            <span>AI 助手</span>
-          </template>
-
-          <div class="chat-container">
-            <div class="chat-messages" ref="chatContainer">
-              <div
-                v-for="(msg, index) in chatMessages"
-                :key="index"
-                class="chat-message"
-                :class="msg.role"
-              >
-                <div class="message-content">{{ msg.content }}</div>
-              </div>
-            </div>
-
-            <div class="chat-input">
-              <el-input
-                v-model="chatInput"
-                type="textarea"
-                :rows="2"
-                placeholder="输入修改指令，如：把这段改得更悲伤一点"
-                @keydown.enter.ctrl="handleSendChat"
-              />
-              <el-button type="primary" @click="handleSendChat">
-                发送
-              </el-button>
-            </div>
+          <div class="text-[10px] text-gray-600 text-center mt-1">
+            Ctrl + Enter to send
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -115,8 +149,10 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { sceneApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { Location, MagicStick, ArrowLeft } from '@element-plus/icons-vue'
+import { Location, MagicStick, ArrowLeft, Document, ChatDotRound, Position, Loading } from '@element-plus/icons-vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
+
+import { fetchEventSource } from '@microsoft/fetch-event-source'
 
 const route = useRoute()
 const router = useRouter()
@@ -141,23 +177,19 @@ async function loadScene() {
     const { data } = await sceneApi.get(sceneId)
     currentScene.value = data
     content.value = data.content || ''
-    // 加载前情提要：优先使用后端动态计算的 context_summary，如果没有则使用 '暂无前情提要'
-    // 注意：data.summary 是本场景的摘要，不是前情提要，千万别用错了！
-    prevSummary.value = data.context_summary || '暂无前情提要'
+    prevSummary.value = data.context_summary || 'No context summary available'
   } catch (error) {
-    ElMessage.error('加载场景失败')
+    ElMessage.error('Failed to load scene')
   }
 }
 
 async function handleGenerate() {
   if (!currentScene.value) return
 
-  // 清空旧内容
   content.value = ''
   generating.value = true
 
   try {
-    // 使用 SSE 流式获取
     const eventSource = new EventSource(`/api/scenes/${currentScene.value.id}/generate`)
 
     eventSource.onmessage = (event) => {
@@ -168,8 +200,7 @@ async function handleGenerate() {
       } else if (data.done) {
         eventSource.close()
         generating.value = false
-        ElMessage.success('生成完成')
-        // 自动保存生成的内容
+        ElMessage.success('Generation complete')
         handleSave()
       } else if (data.error) {
         eventSource.close()
@@ -181,11 +212,11 @@ async function handleGenerate() {
     eventSource.onerror = () => {
       eventSource.close()
       generating.value = false
-      ElMessage.error('生成中断')
+      ElMessage.error('Generation interrupted')
     }
   } catch (error) {
     generating.value = false
-    ElMessage.error('生成失败')
+    ElMessage.error('Generation failed')
   }
 }
 
@@ -197,9 +228,9 @@ async function handleSave() {
     await sceneApi.update(currentScene.value.id, {
       content: content.value
     })
-    ElMessage.success('保存成功')
+    ElMessage.success('Saved')
   } catch (error) {
-    ElMessage.error('保存失败')
+    ElMessage.error('Save failed')
   } finally {
     saving.value = false
   }
@@ -208,16 +239,16 @@ async function handleSave() {
 async function handleApprove() {
   if (!currentScene.value) return
 
-  // 先保存内容，确保最新内容被提交
   await handleSave()
 
   try {
     await sceneApi.update(currentScene.value.id, {
       status: 'approved'
     })
-    ElMessage.success('已确认')
+    ElMessage.success('Scene approved')
+    router.back()
   } catch (error) {
-    ElMessage.error('操作失败')
+    ElMessage.error('Operation failed')
   }
 }
 
@@ -228,28 +259,52 @@ function handleContentChange(newContent) {
 async function handleSendChat() {
   if (!chatInput.value.trim()) return
 
-  // 添加用户消息
+  const userMessage = chatInput.value
+  chatInput.value = ''
+  
   chatMessages.value.push({
     role: 'user',
-    content: chatInput.value
+    content: userMessage
   })
 
-  const userInput = chatInput.value
-  chatInput.value = ''
-
-  // 滚动到底部
   await nextTick()
   scrollToBottom()
 
-  // TODO: 调用 AI 修改接口
-  // 模拟 AI 响应
-  setTimeout(() => {
-    chatMessages.value.push({
-      role: 'assistant',
-      content: '收到你的修改指令，正在处理...'
+  // Add a placeholder for AI response
+  const assistantMsgIndex = chatMessages.value.push({
+    role: 'assistant',
+    content: ''
+  }) - 1
+
+  try {
+    await fetchEventSource(`/api/scenes/${currentScene.value.id}/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message: userMessage }),
+      onmessage(msg) {
+        try {
+          const data = JSON.parse(msg.data)
+          if (data.chunk) {
+            chatMessages.value[assistantMsgIndex].content += data.chunk
+            scrollToBottom()
+          } else if (data.error) {
+             chatMessages.value[assistantMsgIndex].content = `Error: ${data.error}`
+          }
+        } catch (e) {
+          console.error(e)
+        }
+      },
+      onerror(err) {
+        console.error(err)
+        chatMessages.value[assistantMsgIndex].content += '\n[Connection Error]'
+      }
     })
-    nextTick(() => scrollToBottom())
-  }, 500)
+  } catch (error) {
+    console.error('Chat error:', error)
+    chatMessages.value[assistantMsgIndex].content = 'Failed to send message.'
+  }
 }
 
 function scrollToBottom() {
@@ -263,122 +318,19 @@ onMounted(() => {
 })
 </script>
 
-<style lang="scss" scoped>
-.writer-page {
-  height: calc(100vh - 100px);
+<style scoped>
+.glass-input-override :deep(.el-textarea__inner) {
+  background-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  transition: all 0.3s;
+  padding-right: 40px;
 }
 
-.context-card, .assistant-card {
-  height: 100%;
-  overflow-y: auto;
-}
-
-.context-section {
-  margin-bottom: 20px;
-
-  h4 {
-    margin: 0 0 8px;
-    font-size: 14px;
-    color: #666;
-  }
-
-  .context-content {
-    font-size: 13px;
-    color: #333;
-    line-height: 1.6;
-
-    .location {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-weight: 500;
-      margin-bottom: 8px;
-    }
-
-    .beat {
-      color: #666;
-    }
-  }
-}
-
-.editor-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-
-  .editor-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-
-      .scene-title {
-        font-weight: bold;
-      }
-    }
-  }
-
-  .editor-container {
-    flex: 1;
-    overflow-y: auto;
-  }
-}
-
-.assistant-card {
-  display: flex;
-  flex-direction: column;
-
-  .chat-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px 0;
-
-    .chat-message {
-      margin-bottom: 12px;
-
-      .message-content {
-        padding: 10px 14px;
-        border-radius: 8px;
-        font-size: 14px;
-        line-height: 1.5;
-      }
-
-      &.user {
-        text-align: right;
-
-        .message-content {
-          background: #e6f7ff;
-          display: inline-block;
-        }
-      }
-
-      &.assistant {
-        .message-content {
-          background: #f5f5f5;
-          text-align: left;
-        }
-      }
-    }
-  }
-
-  .chat-input {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-
-    .el-button {
-      align-self: flex-end;
-    }
-  }
+.glass-input-override :deep(.el-textarea__inner:hover),
+.glass-input-override :deep(.el-textarea__inner:focus) {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 240, 255, 0.5);
 }
 </style>

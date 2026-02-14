@@ -12,6 +12,12 @@ from app.database import get_db, AsyncSessionLocal
 from app.models import Scene, Chapter
 from app.services import scene_generator, summarizer
 from app.rag import rag_service
+from app.api.scene_chat import router as chat_router
+
+class SceneUpdateRequest(BaseModel):
+    content: Optional[str] = None
+    summary: Optional[str] = None
+    status: Optional[str] = None
 
 class SceneDetailResponse(BaseModel):
     id: str
@@ -29,6 +35,8 @@ class SceneDetailResponse(BaseModel):
         from_attributes = True
 
 router = APIRouter()
+router.include_router(chat_router)
+
 
 
 async def background_summarize(scene_id: str):
@@ -190,7 +198,7 @@ async def generate_scene_summary(
 @router.put("/{scene_id}")
 async def update_scene(
     scene_id: str,
-    scene_update: dict,  # 使用 dict 接收请求体，或者定义 Pydantic 模型
+    scene_update: SceneUpdateRequest,  # 使用 Pydantic 模型
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db)
 ):
@@ -205,12 +213,9 @@ async def update_scene(
 
     # 2. 更新字段
     # 注意：这里我们只更新传入的字段
-    if "content" in scene_update:
-        scene.content = scene_update["content"]
-    if "summary" in scene_update:
-        scene.summary = scene_update["summary"]
-    if "status" in scene_update:
-        scene.status = scene_update["status"]
+    update_data = scene_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(scene, key, value)
     
     # 提交事务保存更改
     await db.commit()
@@ -227,14 +232,14 @@ async def update_scene(
     should_auto_summarize = False
     should_update_rag_only = False
     
-    if "content" in scene_update and len(scene_update["content"]) > 200:
+    if update_data.get("content") and len(update_data["content"]) > 200:
         should_auto_summarize = True
         
-    if scene_update.get("status") == "approved":
+    if update_data.get("status") == "approved":
         should_auto_summarize = True
         
     # 如果用户手动更新了 summary，我们直接把这份 summary 更新到 RAG，而不重新生成
-    if "summary" in scene_update and scene_update["summary"]:
+    if update_data.get("summary"):
         should_update_rag_only = True
         should_auto_summarize = False # 手动更新优先
         

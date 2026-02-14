@@ -4,5 +4,6 @@ from app.models.character import Character
 from app.models.chapter import Chapter
 from app.models.scene import Scene
 from app.models.lore import Lore
+from app.models.system import SystemConfig
 
-__all__ = ["Novel", "Character", "Chapter", "Scene", "Lore"]
+__all__ = ["Novel", "Character", "Chapter", "Scene", "Lore", "SystemConfig"]
