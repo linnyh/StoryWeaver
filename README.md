@@ -1,120 +1,144 @@
-# StoryWeaver - AI 长篇小说生成系统
+<div align="center">
+  <img src="https://img.icons8.com/fluency/96/storytelling.png" alt="StoryWeaver Logo" width="100" />
+  <h1>StoryWeaver</h1>
+  <p><strong>AI 驱动的长篇小说辅助创作系统</strong></p>
+  <p>RAG (检索增强生成) · 分层大纲 · 自动摘要 · 流式写作</p>
 
-一个基于 RAG + 分层大纲架构的 AI 小说创作系统。
+  [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+  [![Vue 3](https://img.shields.io/badge/vue-3.x-green.svg)](https://vuejs.org/)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688.svg)](https://fastapi.tiangolo.com/)
+  [![Python](https://img.shields.io/badge/python-3.10+-3776AB.svg)](https://www.python.org/)
+</div>
 
-## 功能特性
+---
 
-- 📚 **小说管理**：创建、编辑、删除小说
-- 👥 **角色系统**：创建角色卡片，存入向量数据库
-- 📖 **大纲生成**：AI 自动生成章节大纲
-- ✍️ **场景拆分**：将章节拆解为具体的场景细纲
-- 🤖 **AI 写作**：流式生成小说正文
-- 🔄 **自动摘要**：生成场景摘要并存入向量库，供后续章节检索
+## 📖 项目简介
 
-## 快速开始
+**StoryWeaver** 是一个专为长篇小说创作设计的 AI 辅助工具。不同于普通的 AI 聊天机器人，它采用 **"RAG + 分层大纲"** 的架构，解决了 AI 写作中常见的“遗忘上下文”和“逻辑不连贯”问题。
 
-### 1. 安装依赖
+通过结构化的工程方法，StoryWeaver 帮助作者从世界观设定开始，一步步构建大纲、拆分场景，最终生成高质量的小说正文。
+
+## ✨ 核心特性
+
+- **🧠 长期记忆 (RAG)**：利用向量数据库 (ChromaDB) 存储角色设定、世界观和已写章节摘要，AI 永远不会忘记主角的瞳色或上一章的伏笔。
+- **📑 分层大纲系统**：
+  - **Level 1**: 全书大纲与故事核
+  - **Level 2**: 章节列表
+  - **Level 3**: 场景细纲 (Scene Beats) —— 精确控制 AI 的写作方向。
+- **⚡️ 流式极速生成**：基于 SSE (Server-Sent Events) 技术，实时流式输出，写作体验如丝般顺滑。
+- **🔄 自动摘要闭环**：每写完一个场景，系统自动提炼摘要并存入记忆库，为后续章节提供精准的上下文。
+- **📝 专业写作界面**：集成 Tiptap 富文本编辑器，支持 Markdown，提供沉浸式的写作环境。
+
+## 🛠 技术栈
+
+### Frontend (前端)
+
+| 技术 | 说明 |
+| :--- | :--- |
+| ![Vue.js](https://img.shields.io/badge/Vue.js-35495E?style=flat-square&logo=vue.js&logoColor=4FC08D) | **Vue 3** - 渐进式 JavaScript 框架 |
+| ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white) | **Vite** - 极速前端构建工具 |
+| ![Pinia](https://img.shields.io/badge/Pinia-FFE46B?style=flat-square&logo=pinia&logoColor=black) | **Pinia** - 直观的状态管理库 |
+| ![Element Plus](https://img.shields.io/badge/Element_Plus-409EFF?style=flat-square&logo=element-plus&logoColor=white) | **Element Plus** - 基于 Vue 3 的组件库 |
+| ![Tiptap](https://img.shields.io/badge/Tiptap-000000?style=flat-square&logo=tiptap&logoColor=white) | **Tiptap** - 无头富文本编辑器 |
+
+### Backend (后端)
+
+| 技术 | 说明 |
+| :--- | :--- |
+| ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white) | **FastAPI** - 高性能 Python Web 框架 |
+| ![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white) | **SQLAlchemy (Async)** - 异步 ORM |
+| ![ChromaDB](https://img.shields.io/badge/ChromaDB-FF6600?style=flat-square) | **ChromaDB** - 开源嵌入向量数据库 |
+| ![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?style=flat-square&logo=langchain&logoColor=white) | **LangChain** - LLM 应用开发框架 |
+| ![SQLite](https://img.shields.io/badge/SQLite-003B57?style=flat-square&logo=sqlite&logoColor=white) | **SQLite** - 轻量级关系型数据库 |
+
+## 🚀 快速开始
+
+### 1. 克隆项目
 
 ```bash
-# 后端依赖
+git clone https://github.com/linnyh/StoryWeaver.git
+cd StoryWeaver
+```
+
+### 2. 后端设置
+
+```bash
 cd backend
+
+# 创建虚拟环境 (推荐)
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+
+# 安装依赖
 pip install -r requirements.txt
 
-# 前端依赖
-cd frontend
-npm install
+# 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，填入你的 OpenAI 或 MiniMax API Key
 ```
 
-### 2. 配置环境变量
-
-在 `backend/` 目录下创建 `.env` 文件：
-
-```env
-# MiniMax API (可选，使用模拟响应则不需要)
-MINIMAX_API_KEY=your_api_key_here
-MINIMAX_BASE_URL=https://api.minimax.chat/v1
-
-# OpenAI API (可选)
-OPENAI_API_KEY=your_api_key_here
-
-# 数据库配置 (可选)
-DATABASE_URL=sqlite+aiosqlite:///./storyweaver.db
-```
-
-### 3. 启动服务
+### 3. 前端设置
 
 ```bash
-# 启动后端 (在 backend 目录)
-uvicorn app.main:app --reload --port 8000
+cd frontend
 
-# 启动前端 (在 frontend 目录)
+# 安装依赖
+npm install
+
+# 启动开发服务器
 npm run dev
 ```
 
-### 4. 访问系统
+### 4. 启动服务
 
-- 前端：http://localhost:5173
-- API 文档：http://localhost:8000/docs
-
-## 测试
+- **后端**: `http://localhost:8000` (API 文档: `/docs`)
+- **前端**: `http://localhost:5173`
 
 ```bash
-# 后端单元测试
-cd backend
-python test_system.py
-
-# API 测试 (需要先启动服务器)
-python test_api.py
+# 在 backend 目录下
+uvicorn app.main:app --reload
 ```
 
-## 项目结构
+## 📂 项目结构
 
 ```
 StoryWeaver/
-├── backend/                 # FastAPI 后端
-│   ├── app/
-│   │   ├── api/            # REST API 路由
-│   │   ├── models/         # SQLAlchemy 模型
-│   │   ├── services/       # 业务逻辑 (LLM/大纲/摘要)
-│   │   └── rag/           # 向量数据库服务
-│   └── test_*.py           # 测试脚本
+├── 📂 backend/                 # FastAPI 后端核心
+│   ├── 📂 app/
+│   │   ├── 📂 api/            # RESTful API 路由定义
+│   │   ├── 📂 models/         # SQLAlchemy 数据库模型
+│   │   ├── 📂 services/       # 核心业务逻辑 (LLM调用/大纲生成/摘要)
+│   │   └── 📂 rag/            # 向量数据库检索服务
+│   ├── 📄 requirements.txt    # Python 依赖
+│   └── 📄 main.py             # 入口文件
 │
-├── frontend/               # Vue 3 前端
-│   ├── src/
-│   │   ├── views/         # 页面组件
-│   │   ├── components/    # 通用组件
-│   │   ├── stores/        # Pinia 状态管理
-│   │   └── api/           # API 客户端
-│   └── dist/              # 构建产物
+├── 📂 frontend/                # Vue 3 前端应用
+│   ├── 📂 src/
+│   │   ├── 📂 views/          # 页面组件 (小说页/写作页/RAG管理)
+│   │   ├── 📂 components/     # 通用 UI 组件
+│   │   ├── 📂 stores/         # Pinia 状态仓库
+│   │   └── 📂 api/            # Axios 请求封装
+│   └── 📄 package.json        # Node 依赖
 │
-└── DEV_DOC.md             # 开发文档
+└── 📄 DEV_DOC.md               # 详细开发文档
 ```
 
-## API 接口
+## 🤝 贡献指南
 
-### 小说
-- `POST /api/novels/` - 创建小说
-- `GET /api/novels/` - 列出小说
-- `GET /api/novels/{id}` - 获取小说详情
-- `POST /api/novels/{id}/outline` - 生成大纲
+欢迎提交 Issue 和 Pull Request！
 
-### 章节
-- `POST /api/chapters/` - 创建章节
-- `POST /api/chapters/{id}/beats` - 生成场景细纲
+1. Fork 本仓库
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 提交 Pull Request
 
-### 场景
-- `POST /api/scenes/{id}/generate` - 流式生成正文 (SSE)
-- `POST /api/scenes/{id}/summarize` - 生成摘要
+## 📄 许可证
 
-### 角色
-- `POST /api/characters/` - 创建角色
+本项目采用 [MIT 许可证](LICENSE)。
 
-## 技术栈
+---
 
-- **后端**：FastAPI + SQLAlchemy + ChromaDB + LangChain
-- **前端**：Vue 3 + Vite + Pinia + Tiptap
-- **LLM**：支持 OpenAI / MiniMax
-
-## 许可证
-
-MIT
+<div align="center">
+  <p>Made with ❤️ by StoryWeaver Team</p>
+</div>
