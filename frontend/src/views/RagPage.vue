@@ -1,89 +1,103 @@
 <template>
-  <div class="rag-page">
-    <el-card class="rag-card">
-      <template #header>
-        <div class="header">
-          <div class="left">
-            <el-button link @click="goBack">
-              <el-icon><ArrowLeft /></el-icon>
-              返回
-            </el-button>
-            <span class="title">RAG 知识库摘要</span>
-          </div>
-          <div class="right">
+  <div class="h-full p-6 flex flex-col overflow-hidden">
+    <div class="glass-panel flex flex-col h-full rounded-2xl overflow-hidden relative">
+      <!-- Header -->
+      <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50 backdrop-blur-xl shrink-0 z-10">
+        <div class="flex items-center gap-4">
+          <button @click="goBack" class="p-2 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors flex items-center gap-2">
+            <el-icon><ArrowLeft /></el-icon>
+            <span class="text-sm font-medium">Back</span>
+          </button>
+          <div class="h-6 w-px bg-white/10"></div>
+          <h1 class="font-display text-lg text-white font-bold tracking-wide">
+            <span class="text-neon-blue">RAG</span> Knowledge Base
+          </h1>
+        </div>
+        
+        <div class="flex items-center gap-4">
+          <div class="relative group">
             <el-input
               v-model="searchQuery"
-              placeholder="搜索摘要内容..."
+              placeholder="Search knowledge base..."
               prefix-icon="Search"
               clearable
-              style="width: 300px; margin-right: 16px"
+              class="w-80 glass-input-override"
             />
-            <el-tag>共 {{ filteredSummaries.length }} 条记录</el-tag>
+          </div>
+          <div class="px-3 py-1 rounded-full bg-white/5 border border-white/5 text-xs text-gray-400">
+            {{ filteredSummaries.length }} entries
           </div>
         </div>
-      </template>
+      </div>
 
-      <div v-loading="loading" class="content">
-        <el-empty v-if="!loading && filteredSummaries.length === 0" description="暂无摘要数据" />
+      <!-- Content -->
+      <div v-loading="loading" class="flex-1 overflow-y-auto p-6 custom-scrollbar relative bg-space-950/30">
+        <div v-if="!loading && filteredSummaries.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500">
+          <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+            <el-icon size="24"><Search /></el-icon>
+          </div>
+          <span>No entries found</span>
+        </div>
         
-        <div v-else class="summary-grid">
-          <el-row :gutter="20">
-            <el-col :span="24" v-for="(item, index) in filteredSummaries" :key="item.id">
-              <el-card class="summary-item" shadow="hover">
-                <div class="summary-header">
-                  <div class="meta-info">
-                    <span class="scene-id">
-                      <el-icon><Location /></el-icon> 
-                      场景 ID: {{ item.metadata?.scene_id || 'Unknown' }}
-                    </span>
-                    <el-divider direction="vertical" />
-                    <span class="doc-id">Doc ID: {{ item.id }}</span>
-                  </div>
-                  <div class="actions">
-                    <el-button type="primary" link size="small" @click="handleEdit(item)">
-                      <el-icon><Edit /></el-icon> 编辑
-                    </el-button>
-                    <el-button type="danger" link size="small" @click="handleDelete(item)">
-                      <el-icon><Delete /></el-icon> 删除
-                    </el-button>
-                  </div>
+        <div v-else class="grid grid-cols-1 gap-6 max-w-5xl mx-auto">
+          <div v-for="(item, index) in filteredSummaries" :key="item.id" 
+               class="glass-card p-6 rounded-xl group relative hover:translate-y-[-2px] transition-transform duration-300">
+            
+            <div class="flex justify-between items-start mb-4 pb-4 border-b border-white/5">
+              <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2 px-2 py-1 rounded bg-neon-blue/10 text-neon-blue text-xs font-medium border border-neon-blue/20">
+                  <el-icon><Location /></el-icon> 
+                  <span>Scene: {{ item.metadata?.scene_id ? item.metadata.scene_id.substring(0, 8) + '...' : 'Unknown' }}</span>
                 </div>
-                
-                <div class="summary-content">
-                  {{ item.text }}
+                <div class="text-xs text-gray-500 font-mono bg-white/5 px-2 py-1 rounded">
+                  Doc: {{ item.id.substring(0, 8) }}...
                 </div>
-                
-                <div class="summary-footer" v-if="item.metadata">
-                  <div class="tags">
-                    <el-tag size="small" type="info" effect="plain" v-for="(val, key) in item.metadata" :key="key" class="meta-tag">
-                      {{ key }}: {{ val }}
-                    </el-tag>
-                  </div>
-                </div>
-              </el-card>
-            </el-col>
-          </el-row>
+              </div>
+              
+              <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button @click="handleEdit(item)" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-blue transition-colors">
+                  <el-icon><Edit /></el-icon>
+                </button>
+                <button @click="handleDelete(item)" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-red-400 transition-colors">
+                  <el-icon><Delete /></el-icon>
+                </button>
+              </div>
+            </div>
+            
+            <div class="text-gray-300 text-sm leading-relaxed mb-4 whitespace-pre-wrap font-light">
+              {{ item.text }}
+            </div>
+            
+            <div v-if="item.metadata && Object.keys(item.metadata).length > 0" class="flex flex-wrap gap-2 pt-4 border-t border-white/5 border-dashed">
+              <span v-for="(val, key) in item.metadata" :key="key" 
+                    class="px-2 py-0.5 rounded text-[10px] bg-white/5 text-gray-500 border border-white/5">
+                {{ key }}: {{ val }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
-    </el-card>
+    </div>
 
-    <!-- 编辑对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑摘要" width="500px">
-      <el-form :model="editForm">
-        <el-form-item label="摘要内容">
+    <!-- Edit Dialog -->
+    <el-dialog v-model="showEditDialog" title="Edit Summary" width="600px" class="glass-dialog-override" destroy-on-close>
+      <el-form :model="editForm" label-position="top">
+        <el-form-item label="Content">
           <el-input
             v-model="editForm.text"
             type="textarea"
-            :rows="6"
-            placeholder="请输入摘要内容"
+            :rows="8"
+            placeholder="Enter summary content..."
           />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmEdit" :loading="saving">
-          保存
-        </el-button>
+        <div class="flex justify-end gap-3">
+          <el-button @click="showEditDialog = false" class="!bg-transparent !border-white/10 !text-gray-400 hover:!text-white hover:!bg-white/5">Cancel</el-button>
+          <el-button type="primary" @click="confirmEdit" :loading="saving" class="!bg-neon-blue/10 !border-neon-blue/20 !text-neon-blue hover:!bg-neon-blue/20">
+            Save Changes
+          </el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -127,7 +141,7 @@ async function loadSummaries() {
     const { data } = await novelApi.getRagSummaries(route.params.id)
     summaries.value = data
   } catch (error) {
-    ElMessage.error('加载摘要失败')
+    ElMessage.error('Failed to load summaries')
   } finally {
     loading.value = false
   }
@@ -149,11 +163,11 @@ async function confirmEdit() {
     await novelApi.updateRagSummary(route.params.id, editForm.value.id, {
       text: editForm.value.text
     })
-    ElMessage.success('更新成功')
+    ElMessage.success('Updated successfully')
     showEditDialog.value = false
     await loadSummaries()
   } catch (error) {
-    ElMessage.error('更新失败')
+    ElMessage.error('Update failed')
   } finally {
     saving.value = false
   }
@@ -161,20 +175,21 @@ async function confirmEdit() {
 
 function handleDelete(item) {
   ElMessageBox.confirm(
-    '确定要删除这条摘要吗？此操作不可恢复。',
-    '警告',
+    'Are you sure you want to delete this summary? This action cannot be undone.',
+    'Warning',
     {
-      confirmButtonText: '删除',
-      cancelButtonText: '取消',
+      confirmButtonText: 'Delete',
+      cancelButtonText: 'Cancel',
       type: 'warning',
+      customClass: 'glass-dialog-override'
     }
   ).then(async () => {
     try {
       await novelApi.deleteRagSummary(route.params.id, item.id)
-      ElMessage.success('删除成功')
+      ElMessage.success('Deleted successfully')
       await loadSummaries()
     } catch (error) {
-      ElMessage.error('删除失败')
+      ElMessage.error('Deletion failed')
     }
   })
 }
@@ -184,144 +199,21 @@ onMounted(() => {
 })
 </script>
 
-<style lang="scss" scoped>
-.rag-page {
-  padding: 20px;
-  height: 100%;
-  box-sizing: border-box;
-  background-color: #f5f7fa;
+<style scoped>
+.glass-input-override :deep(.el-input__wrapper) {
+  background-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s;
 }
 
-.rag-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  border: none;
-  
-  :deep(.el-card__body) {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0;
-    background-color: #f5f7fa;
-  }
-  
-  :deep(.el-card__header) {
-    padding: 16px 24px;
-    border-bottom: 1px solid #ebeef5;
-  }
+.glass-input-override :deep(.el-input__wrapper:hover),
+.glass-input-override :deep(.el-input__wrapper.is-focus) {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(0, 240, 255, 0.5);
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  
-  .left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    
-    .title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #303133;
-    }
-  }
-  
-  .right {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
-}
-
-.summary-grid {
-  padding: 24px;
-  max-width: 1000px;
-  margin: 0 auto;
-}
-
-.summary-item {
-  margin-bottom: 24px;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  border: 1px solid #e4e7ed;
-  border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
-  background-color: #ffffff;
-  
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-    border-color: #dcdfe6;
-  }
-  
-  :deep(.el-card__body) {
-    padding: 24px;
-  }
-  
-  .summary-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #f2f6fc;
-    
-    .meta-info {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 13px;
-      color: #606266;
-      font-weight: 500;
-      
-      .scene-id {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        color: #409eff;
-        background-color: #ecf5ff;
-        padding: 4px 8px;
-        border-radius: 4px;
-      }
-      
-      .doc-id {
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-        color: #909399;
-        font-size: 12px;
-        background-color: #f4f4f5;
-        padding: 2px 6px;
-        border-radius: 4px;
-      }
-    }
-
-    .actions {
-      display: flex;
-      align-items: center;
-    }
-  }
-  
-  .summary-content {
-    font-size: 15px;
-    line-height: 1.8;
-    color: #303133;
-    margin-bottom: 24px;
-    white-space: pre-wrap;
-    text-align: justify;
-    padding: 0 4px;
-  }
-  
-  .summary-footer {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 16px;
-    border-top: 1px dashed #ebeef5;
-    
-    .tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-  }
+.glass-input-override :deep(.el-input__inner) {
+  color: white;
 }
 </style>

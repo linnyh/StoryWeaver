@@ -1,201 +1,224 @@
 <template>
-  <div class="novel-page">
-    <el-row :gutter="20">
-      <!-- 左侧：章节树 -->
-      <el-col :span="6">
-        <el-card class="chapter-tree-card">
-          <template #header>
-            <div class="card-header">
-              <span>章节结构</span>
-              <div class="header-buttons">
-                <el-button
-                  link
-                  type="primary"
-                  size="small"
-                  @click="handleExport"
-                  :loading="exporting"
-                  :disabled="!currentNovel"
-                >
-                  <el-icon><Download /></el-icon>
-                  导出全文
-                </el-button>
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click="handleGenerateOutline"
-                  :loading="generatingOutline"
-                  :disabled="!currentNovel"
-                >
-                  生成大纲
-                </el-button>
+  <div class="h-full grid grid-cols-12 gap-6 p-1">
+    <!-- Left: Chapter Tree -->
+    <div class="col-span-3 flex flex-col glass-panel rounded-2xl overflow-hidden h-[calc(100vh-140px)]">
+      <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50">
+        <span class="font-display text-white font-medium tracking-wide">Chapters</span>
+        <div class="flex gap-2">
+          <button 
+            @click="handleExport" 
+            :disabled="!currentNovel || exporting"
+            class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-blue transition-colors disabled:opacity-50"
+            title="Export Novel"
+          >
+            <el-icon><Download /></el-icon>
+          </button>
+          <button 
+            @click="handleGenerateOutline" 
+            :disabled="!currentNovel || generatingOutline"
+            class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-purple transition-colors disabled:opacity-50"
+            title="Generate Outline"
+          >
+            <el-icon><Operation /></el-icon>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-2 custom-scrollbar">
+        <div v-if="!currentNovel" class="p-4 space-y-3">
+          <div class="h-4 bg-white/5 rounded animate-pulse w-3/4"></div>
+          <div class="h-4 bg-white/5 rounded animate-pulse w-1/2"></div>
+        </div>
+
+        <div v-else-if="chapters.length === 0" class="flex flex-col items-center justify-center h-full text-gray-500">
+          <el-icon size="32" class="mb-2 opacity-50"><Document /></el-icon>
+          <span class="text-sm">No chapters yet</span>
+        </div>
+
+        <div v-else class="space-y-1">
+          <!-- Custom Tree Implementation for better styling control -->
+           <div 
+            v-for="chapter in chapters" 
+            :key="chapter.id"
+            @click="handleChapterClick(chapter)"
+            class="group flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all duration-200 border border-transparent"
+            :class="currentChapter?.id === chapter.id ? 'bg-neon-blue/10 border-neon-blue/20 text-white shadow-[0_0_10px_rgba(0,240,255,0.1)]' : 'hover:bg-white/5 text-gray-400 hover:text-gray-200 hover:border-white/5'"
+          >
+            <div class="flex items-center gap-3 overflow-hidden">
+              <div class="w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium"
+                   :class="currentChapter?.id === chapter.id ? 'bg-neon-blue text-space-950' : 'bg-white/10 text-gray-500 group-hover:bg-white/20'">
+                {{ chapter.order_index }}
               </div>
+              <span class="truncate text-sm font-medium">{{ chapter.title || `Chapter ${chapter.order_index}` }}</span>
             </div>
-          </template>
+            <span v-if="chapter.scene_count > 0" class="text-[10px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 group-hover:text-gray-300">
+              {{ chapter.scene_count }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
 
-          <div v-if="!currentNovel" class="empty-state">
-            <el-skeleton :rows="3" animated />
+    <!-- Center: Content -->
+    <div class="col-span-6 flex flex-col glass-panel rounded-2xl overflow-hidden h-[calc(100vh-140px)]">
+      <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50 backdrop-blur-xl z-10">
+        <h2 class="font-display text-lg text-white font-bold truncate pr-4">
+          {{ currentChapter?.title || 'Select a Chapter' }}
+        </h2>
+        <div v-if="currentChapter" class="flex gap-2 shrink-0">
+          <button 
+            @click="handleUpdateSummary" 
+            :disabled="scenes.length === 0 || summarizing"
+            class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-xs font-medium text-gray-300 transition-colors disabled:opacity-50"
+          >
+            Update Summary
+          </button>
+          <button 
+            @click="handleGenerateBeats" 
+            :disabled="generatingBeats"
+            class="px-3 py-1.5 rounded-lg bg-neon-blue/10 hover:bg-neon-blue/20 border border-neon-blue/20 text-xs font-medium text-neon-blue transition-colors disabled:opacity-50 flex items-center gap-1"
+          >
+            <el-icon><MagicStick /></el-icon>
+            Split Scenes
+          </button>
+        </div>
+      </div>
+
+      <div class="flex-1 overflow-y-auto p-6 custom-scrollbar relative">
+        <div v-if="!currentChapter" class="flex flex-col items-center justify-center h-full text-gray-500">
+          <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+            <el-icon size="24"><ArrowLeft /></el-icon>
+          </div>
+          <span>Select a chapter to start writing</span>
+        </div>
+
+        <div v-else class="space-y-6">
+          <!-- Chapter Summary -->
+          <div v-if="currentChapter.summary" class="p-4 rounded-xl bg-space-800/50 border border-white/5 text-sm leading-relaxed text-gray-300">
+            <div class="text-xs uppercase tracking-wider text-gray-500 mb-2 font-bold">Summary</div>
+            {{ currentChapter.summary }}
           </div>
 
-          <div v-else-if="chapters.length === 0" class="empty-state">
-            <el-empty description="暂无章节" :image-size="80" />
-          </div>
-
-          <div v-else class="chapter-tree">
-            <el-tree
-              :data="treeData"
-              :props="treeProps"
-              @node-click="handleChapterClick"
-              node-key="id"
-              :current-node-key="currentChapter?.id"
-              default-expand-all
-              highlight-current
+          <!-- Scenes List -->
+          <div v-if="scenes.length > 0" class="space-y-4">
+            <div class="flex items-center gap-2 text-xs uppercase tracking-wider text-gray-500 font-bold mb-2">
+              <span class="w-1.5 h-1.5 rounded-full bg-neon-purple"></span>
+              Scenes Sequence
+            </div>
+            
+            <div 
+              v-for="(scene, index) in scenes" 
+              :key="scene.id"
+              @click="$router.push(`/write/${scene.id}`)"
+              class="group relative p-4 rounded-xl border border-white/5 bg-white/[0.02] hover:bg-white/[0.05] hover:border-neon-purple/30 cursor-pointer transition-all duration-300 hover:transform hover:translate-x-1"
             >
-              <template #default="{ node, data }">
-                <span class="tree-node">
-                  <span>{{ node.label }}</span>
-                  <el-tag v-if="data.sceneCount > 0" size="small" type="info">
-                    {{ data.sceneCount }} 场景
-                  </el-tag>
-                </span>
-              </template>
-            </el-tree>
-          </div>
-        </el-card>
-      </el-col>
+              <!-- Connector Line -->
+              <div v-if="index !== scenes.length - 1" class="absolute left-6 bottom-[-20px] w-0.5 h-[20px] bg-white/5 group-hover:bg-neon-purple/20 transition-colors"></div>
 
-      <!-- 中间：章节/场景内容 -->
-      <el-col :span="12">
-        <el-card class="content-card">
-          <template #header>
-            <div class="card-header">
-              <span>{{ currentChapter?.title || '选择一个章节' }}</span>
-              <div v-if="currentChapter" class="header-actions">
-                <el-button
-                  size="small"
-                  @click="handleUpdateSummary"
-                  :loading="summarizing"
-                  :disabled="scenes.length === 0"
-                >
-                  更新摘要
-                </el-button>
-                <el-button
-                  size="small"
-                  @click="handleGenerateBeats"
-                  :loading="generatingBeats"
-                >
-                  拆分场景
-                </el-button>
+              <div class="flex justify-between items-start mb-2">
+                <div class="flex items-center gap-2 text-neon-blue text-sm font-medium">
+                  <el-icon><Location /></el-icon>
+                  <span>{{ scene.location || 'Unknown Location' }}</span>
+                </div>
+                <div class="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wide"
+                     :class="scene.status === 'approved' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'">
+                  {{ scene.status === 'approved' ? 'Done' : 'Draft' }}
+                </div>
+              </div>
+              
+              <p class="text-gray-400 text-sm line-clamp-3 group-hover:text-gray-200 transition-colors">
+                {{ scene.beat_description || 'No description available.' }}
+              </p>
+              
+              <div class="mt-3 flex items-center text-xs text-gray-600 group-hover:text-neon-purple/70 transition-colors">
+                 <span>Enter Scene</span>
+                 <el-icon class="ml-1"><ArrowRight /></el-icon>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="flex flex-col items-center justify-center py-12 border-2 border-dashed border-white/5 rounded-xl">
+            <p class="text-gray-500 mb-4">No scenes yet</p>
+            <button @click="handleGenerateBeats" class="btn-ghost text-sm">
+              Auto-Generate Scenes
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Database Sidebar -->
+    <div class="col-span-3 flex flex-col glass-panel rounded-2xl overflow-hidden h-[calc(100vh-140px)]">
+      <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50">
+        <span class="font-display text-white font-medium tracking-wide">Database</span>
+        <button @click="goToRag" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="RAG Knowledge">
+          <el-icon><Files /></el-icon>
+        </button>
+      </div>
+
+      <div class="flex-1 flex flex-col overflow-hidden">
+        <!-- Custom Tabs -->
+        <div class="flex border-b border-white/5">
+          <button 
+            v-for="tab in ['characters', 'lore']" 
+            :key="tab"
+            @click="activeTab = tab"
+            class="flex-1 py-3 text-xs font-bold uppercase tracking-wider transition-colors border-b-2"
+            :class="activeTab === tab ? 'text-neon-blue border-neon-blue bg-white/5' : 'text-gray-500 border-transparent hover:text-gray-300 hover:bg-white/[0.02]'"
+          >
+            {{ tab }}
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+          <template v-if="activeTab === 'characters'">
+            <div v-if="characters.length === 0" class="text-center py-8 text-gray-500 text-sm">No characters found</div>
+            <div v-else class="space-y-3">
+              <div v-for="char in characters" :key="char.id" class="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                <div class="flex justify-between items-start">
+                  <div class="font-medium text-white">{{ char.name }}</div>
+                  <div class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400">{{ char.role || 'NPC' }}</div>
+                </div>
+                <!-- Add more char details if available -->
               </div>
             </div>
           </template>
 
-          <div v-if="!currentChapter" class="empty-state">
-            <el-empty description="从左侧选择章节" />
-          </div>
-
-          <div v-else>
-            <!-- 章节概要 -->
-            <div v-if="currentChapter.summary" class="chapter-summary">
-              <h4>章节概要</h4>
-              <p>{{ currentChapter.summary }}</p>
-            </div>
-
-            <!-- 场景列表 -->
-            <div v-if="scenes.length > 0" class="scene-list">
-              <div
-                v-for="scene in scenes"
-                :key="scene.id"
-                class="scene-item"
-                @click="$router.push(`/write/${scene.id}`)"
-              >
-                <div class="scene-info">
-                  <div class="scene-location">
-                    <el-icon><Location /></el-icon>
-                    {{ scene.location || '未指定地点' }}
-                  </div>
-                  <div class="scene-beat">
-                    {{ scene.beat_description || '暂无场景描述' }}
-                  </div>
-                  <div class="scene-status">
-                    <el-tag :type="scene.status === 'approved' ? 'success' : 'info'" size="small">
-                      {{ scene.status === 'approved' ? '已完成' : '草稿' }}
-                    </el-tag>
-                  </div>
-                </div>
+          <template v-if="activeTab === 'lore'">
+            <div v-if="lores.length === 0" class="text-center py-8 text-gray-500 text-sm">No lore entries found</div>
+            <div v-else class="space-y-3">
+              <div v-for="lore in lores" :key="lore.id" class="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+                <div class="font-medium text-neon-blue mb-1 text-sm">{{ lore.title }}</div>
+                <p class="text-xs text-gray-400 line-clamp-3">{{ lore.content }}</p>
               </div>
-            </div>
-
-            <div v-else class="empty-state">
-              <el-empty description="暂无场景，点击「拆分场景」生成" :image-size="60" />
-            </div>
-          </div>
-        </el-card>
-      </el-col>
-
-      <!-- 右侧：角色和世界观 -->
-      <el-col :span="6">
-        <el-card class="sidebar-card">
-          <template #header>
-            <div class="card-header">
-              <span>资料库</span>
-              <el-button link size="small" @click="goToRag">
-                <el-icon><Files /></el-icon>
-                RAG 摘要
-              </el-button>
             </div>
           </template>
-          <el-tabs v-model="activeTab">
-            <el-tab-pane label="角色" name="characters">
-              <div class="sidebar-content">
-                <div
-                  v-for="char in characters"
-                  :key="char.id"
-                  class="character-item"
-                >
-                  <div class="char-name">{{ char.name }}</div>
-                  <div class="char-role">{{ char.role || '配角' }}</div>
-                </div>
-                <el-empty v-if="characters.length === 0" description="暂无角色" :image-size="60" />
-              </div>
-            </el-tab-pane>
-            <el-tab-pane label="世界观" name="lore">
-              <div class="sidebar-content">
-                <div
-                  v-for="lore in lores"
-                  :key="lore.id"
-                  class="lore-item"
-                >
-                  <div class="lore-title">{{ lore.title }}</div>
-                  <div class="lore-content">{{ lore.content }}</div>
-                </div>
-                <el-empty v-if="lores.length === 0" description="暂无世界观设定" :image-size="60" />
-              </div>
-            </el-tab-pane>
-          </el-tabs>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
 
-    <!-- 生成大纲对话框 -->
-    <el-dialog v-model="showOutlineDialog" title="生成大纲" width="500px">
-      <el-form :model="outlineForm" label-width="80px">
-        <el-form-item label="故事核">
+    <!-- Dialogs -->
+    <el-dialog v-model="showOutlineDialog" title="Generate Outline" width="500px" class="glass-dialog-override" destroy-on-close>
+      <el-form :model="outlineForm" label-position="top">
+        <el-form-item label="Core Premise">
           <el-input
             v-model="outlineForm.premise"
             type="textarea"
-            :rows="3"
-            placeholder="一句话概括你的故事"
+            :rows="4"
+            placeholder="Summarize your story idea..."
           />
         </el-form-item>
-        <el-form-item label="章节数">
-          <el-input-number v-model="outlineForm.numChapters" :min="5" :max="30" />
+        <el-form-item label="Target Chapter Count">
+          <el-input-number v-model="outlineForm.numChapters" :min="5" :max="50" class="w-full" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showOutlineDialog = false">取消</el-button>
-        <el-button type="primary" @click="confirmGenerateOutline" :loading="generatingOutline">
-          生成
-        </el-button>
+        <div class="flex justify-end gap-3">
+          <el-button @click="showOutlineDialog = false">Cancel</el-button>
+          <el-button type="primary" @click="confirmGenerateOutline" :loading="generatingOutline">
+            Generate
+          </el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -206,7 +229,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNovelStore } from '@/stores/novel'
 import { ElMessage } from 'element-plus'
-import { Download, Location, Files } from '@element-plus/icons-vue'
+import { Download, Location, Files, Operation, Document, MagicStick, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -231,42 +254,45 @@ const outlineForm = ref({
   numChapters: 10
 })
 
-const treeProps = {
-  // children: 'scenes',
-  label: 'title'
-}
-
-const treeData = computed(() => {
-  return chapters.value.map(chapter => ({
-    id: chapter.id,
-    title: chapter.title || `第 ${chapter.order_index} 章`,
-    sceneCount: chapter.scene_count || 0
-  }))
-})
-
 async function loadData() {
   const novelId = route.params.id
   if (!novelId) return
 
-  // 只有当小说ID发生变化时才重置状态
-  if (store.currentNovel?.id !== novelId) {
+  if (store.currentNovel?.id !== novelId || !store.currentNovel) {
+    // Reset state to prevent stale data from previous novel (especially scenes/chapters)
     store.reset()
     try {
       await store.loadNovel(novelId)
-      await store.loadChapters(novelId)
-      await store.loadCharacters(novelId)
-      await store.loadLores(novelId)
-
-      if (currentNovel.value?.premise) {
-        outlineForm.value.premise = currentNovel.value.premise
-      }
     } catch (error) {
-      ElMessage.error('加载小说详情失败')
+      ElMessage.error('Failed to load novel details')
       console.error(error)
+      return // Stop if novel loading fails
+    }
+    
+    // Load related data independently
+    await Promise.all([
+      store.loadChapters(novelId).catch(e => console.error('Failed to load chapters', e)),
+      store.loadCharacters(novelId).catch(e => console.error('Failed to load characters', e)),
+      store.loadLores(novelId).catch(e => console.error('Failed to load lores', e))
+    ])
+
+    if (store.currentNovel?.premise) {
+      outlineForm.value.premise = store.currentNovel.premise
     }
   } else {
-    // 如果小说ID没变（例如从写作页返回），我们只需要刷新一下场景列表以获取最新状态（如完成状态）
-    // 如果当前选了章节，就刷新该章节的场景
+    if (store.currentNovel?.premise) {
+      outlineForm.value.premise = store.currentNovel.premise
+    }
+    // Even if ID hasn't changed, reload if data is missing (e.g. chapters list is empty)
+    if (store.chapters.length === 0) {
+       await Promise.all([
+         store.loadChapters(novelId).catch(e => console.error('Failed to load chapters', e)),
+         store.loadCharacters(novelId).catch(e => console.error('Failed to load characters', e)),
+         store.loadLores(novelId).catch(e => console.error('Failed to load lores', e))
+       ])
+    }
+
+    // If a chapter is currently selected, refresh its scenes
     if (store.currentChapter) {
       try {
         await store.loadScenes(store.currentChapter.id)
@@ -277,9 +303,9 @@ async function loadData() {
   }
 }
 
-function handleChapterClick(data) {
-  store.currentChapter = chapters.value.find(c => c.id === data.id)
-  store.loadScenes(data.id)
+function handleChapterClick(chapter) {
+  store.currentChapter = chapters.value.find(c => c.id === chapter.id)
+  store.loadScenes(chapter.id)
 }
 
 function handleGenerateOutline() {
@@ -288,7 +314,7 @@ function handleGenerateOutline() {
 
 async function confirmGenerateOutline() {
   if (!outlineForm.value.premise) {
-    ElMessage.warning('请输入故事核')
+    ElMessage.warning('Please enter a story premise')
     return
   }
 
@@ -296,17 +322,17 @@ async function confirmGenerateOutline() {
   try {
     await store.generateOutline(route.params.id, {
       premise: outlineForm.value.premise,
-      genre: currentNovel.value.genre || '玄幻',
-      tone: currentNovel.value.tone || '严肃',
+      genre: currentNovel.value.genre || 'Fantasy',
+      tone: currentNovel.value.tone || 'Serious',
       num_chapters: outlineForm.value.numChapters
     })
     await store.loadCharacters(route.params.id)
     await store.loadLores(route.params.id)
-    ElMessage.success('大纲生成成功')
+    ElMessage.success('Outline generated successfully')
     showOutlineDialog.value = false
   } catch (error) {
     console.error('Generate outline error:', error)
-    ElMessage.error(error.message || '生成失败')
+    ElMessage.error(error.message || 'Generation failed')
   } finally {
     generatingOutline.value = false
   }
@@ -320,11 +346,10 @@ async function handleGenerateBeats() {
     await store.generateBeats(currentChapter.value.id, {
       num_beats: 6
     })
-    // 重新加载场景列表
     await store.loadScenes(currentChapter.value.id)
-    ElMessage.success('场景拆分成功')
+    ElMessage.success('Scenes split successfully')
   } catch (error) {
-    ElMessage.error('生成失败')
+    ElMessage.error('Failed to generate scenes')
   } finally {
     generatingBeats.value = false
   }
@@ -336,10 +361,10 @@ async function handleUpdateSummary() {
   summarizing.value = true
   try {
     await store.summarizeChapter(currentChapter.value.id)
-    ElMessage.success('摘要更新成功')
+    ElMessage.success('Summary updated')
   } catch (error) {
     console.error(error)
-    ElMessage.error(error.message || '更新摘要失败')
+    ElMessage.error(error.message || 'Failed to update summary')
   } finally {
     summarizing.value = false
   }
@@ -352,13 +377,11 @@ async function handleExport() {
   try {
     const response = await store.exportNovel(route.params.id)
     
-    // Create download link
     const blob = new Blob([response.data], { type: 'text/plain;charset=utf-8' })
     const url = window.URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
     
-    // Extract filename from header or use default
     let filename = `${currentNovel.value.title}.txt`
     const disposition = response.headers['content-disposition']
     if (disposition && disposition.indexOf('filename*=') !== -1) {
@@ -374,10 +397,10 @@ async function handleExport() {
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
     
-    ElMessage.success('导出成功')
+    ElMessage.success('Export successful')
   } catch (error) {
     console.error(error)
-    ElMessage.error('导出失败')
+    ElMessage.error('Export failed')
   } finally {
     exporting.value = false
   }
@@ -399,124 +422,6 @@ watch(
 )
 </script>
 
-<style lang="scss" scoped>
-.novel-page {
-  height: 100%;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-
-  .header-buttons {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-  }
-}
-
-.chapter-tree-card {
-  height: calc(100vh - 140px);
-
-  .tree-node {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-  }
-}
-
-.content-card {
-  height: calc(100vh - 140px);
-  overflow-y: auto;
-
-  .chapter-summary {
-    padding: 16px;
-    background: #f5f7fa;
-    border-radius: 8px;
-    margin-bottom: 16px;
-
-    h4 {
-      margin: 0 0 8px;
-      font-size: 14px;
-      color: #666;
-    }
-
-    p {
-      margin: 0;
-      font-size: 14px;
-      line-height: 1.6;
-      color: #333;
-    }
-  }
-
-  .scene-item {
-    padding: 16px;
-    border-bottom: 1px solid #eee;
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover {
-      background: #f5f7fa;
-    }
-
-    .scene-location {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-weight: 500;
-      color: #333;
-      margin-bottom: 8px;
-    }
-
-    .scene-beat {
-      font-size: 14px;
-      color: #666;
-      margin-bottom: 8px;
-      line-height: 1.5;
-    }
-  }
-}
-
-.sidebar-card {
-  height: calc(100vh - 140px);
-
-  .sidebar-content {
-    max-height: 400px;
-    overflow-y: auto;
-  }
-
-  .character-item {
-    padding: 12px;
-    border-bottom: 1px solid #eee;
-
-    .char-name {
-      font-weight: 500;
-      margin-bottom: 4px;
-    }
-
-    .char-role {
-      font-size: 12px;
-      color: #999;
-    }
-  }
-
-  .lore-item {
-    padding: 12px;
-    border-bottom: 1px solid #eee;
-
-    .lore-title {
-      font-weight: 500;
-      margin-bottom: 4px;
-      color: #409eff;
-    }
-
-    .lore-content {
-      font-size: 13px;
-      color: #666;
-      line-height: 1.5;
-    }
-  }
-}
+<style scoped>
+/* Scoped overrides if needed */
 </style>

@@ -8,8 +8,8 @@ if "SSLKEYLOGFILE" in os.environ:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import novel, character, chapter, scene, lore
-from app.models import Lore  # 导入 Lore 模型以创建数据库表
+from app.api import novel, character, chapter, scene, lore, settings
+from app.models import Lore, SystemConfig  # 导入模型以创建数据库表
 from app.database import init_db
 
 app = FastAPI(
@@ -21,7 +21,7 @@ app = FastAPI(
 # CORS 配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -33,6 +33,7 @@ app.include_router(character.router, prefix="/api/characters", tags=["Character"
 app.include_router(chapter.router, prefix="/api/chapters", tags=["Chapter"])
 app.include_router(scene.router, prefix="/api/scenes", tags=["Scene"])
 app.include_router(lore.router, prefix="/api/lore", tags=["Lore"])
+app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
 
 
 @app.get("/")

@@ -4,7 +4,7 @@ from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -68,11 +68,22 @@ async def generate_beats(
     # 调用 AI 生成场景
     prompt = f"""请将小说章节拆分为具体的场景细纲。
 
+【当前任务】
+根据本章概要，将其拆解为 4-6 个具体的场景（Scene）。
+
+【本章信息】
 章节标题：{chapter.title}
 章节概要：{chapter.summary}
-前情提要：{prev_summary}
 
-请输出 4-6 个场景，每个场景包含：地点、出场人物、动作指令（Beat）。
+【前情提要】（仅供上下文参考，已发生剧情，请勿重复）
+{prev_summary}
+
+【生成要求】
+1. 严格基于“本章概要”进行拆解，确保剧情向前推进。
+2. 绝对不要重复“前情提要”中的剧情。
+3. 每个场景包含：地点、出场人物、动作指令（Beat）。
+4. 动作指令要具体，包含冲突和推进。
+
 请直接输出 JSON 格式的数组，不要包含任何 markdown 格式标记或其他文字。
 格式示例：
 [
@@ -92,10 +103,8 @@ async def generate_beats(
     # 保存场景到数据库
     # 先删除旧场景
     await db.execute(
-        select(Scene).where(Scene.chapter_id == chapter_id)
+        delete(Scene).where(Scene.chapter_id == chapter_id)
     )
-    # TODO: 应该使用 delete 语句，这里简化处理，假设重新生成会覆盖
-    # 实际应用中应该先删除旧的
 
     created_scenes = []
     for i, scene_data in enumerate(scenes_data):

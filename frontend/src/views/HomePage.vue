@@ -1,136 +1,210 @@
 <template>
-  <div class="home-page">
-    <el-card class="novel-list-card">
-      <template #header>
-        <div class="card-header">
-          <div class="left">
-            <span>我的小说</span>
-            <el-button 
-              v-if="isSelectionMode" 
-              type="danger" 
-              size="small" 
-              plain
-              @click="handleBatchDelete"
-              :disabled="selectedNovels.length === 0"
-            >
-              删除选中 ({{ selectedNovels.length }})
-            </el-button>
-            <el-button 
-              v-if="isSelectionMode" 
-              size="small" 
-              @click="cancelSelection"
-            >
-              取消
-            </el-button>
-          </div>
-          <div class="right">
-            <el-button 
+  <div class="max-w-7xl mx-auto space-y-8 pb-12">
+    <!-- Hero Section -->
+    <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-space-800 to-space-900 border border-white/10 shadow-2xl p-8 md:p-12 group">
+      <div class="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-neon-purple/20 rounded-full blur-[80px] group-hover:bg-neon-purple/30 transition-colors duration-1000"></div>
+      <div class="relative z-10">
+        <h1 class="text-4xl md:text-5xl font-bold mb-4 bg-clip-text text-transparent bg-gradient-to-r from-white via-blue-100 to-gray-400 font-display">
+          Welcome back, Writer.
+        </h1>
+        <p class="text-gray-400 text-lg max-w-2xl mb-8 leading-relaxed">
+          Your universe awaits. Continue weaving your stories or start a new journey into the unknown.
+        </p>
+        
+        <div class="flex items-center gap-4">
+          <button @click="showCreateDialog = true" class="btn-primary flex items-center gap-2 group">
+            <el-icon class="text-lg group-hover:rotate-90 transition-transform duration-300"><Plus /></el-icon>
+            <span>Create New Novel</span>
+          </button>
+          <button class="btn-ghost flex items-center gap-2">
+            <el-icon><Document /></el-icon>
+            <span>Documentation</span>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Stats -->
+      <div class="mt-12 grid grid-cols-3 gap-8 border-t border-white/5 pt-8">
+        <div>
+          <div class="text-3xl font-bold text-white mb-1">{{ novels.length }}</div>
+          <div class="text-sm text-gray-500 uppercase tracking-wider font-medium">Novels</div>
+        </div>
+        <div>
+          <div class="text-3xl font-bold text-white mb-1">12</div>
+          <div class="text-sm text-gray-500 uppercase tracking-wider font-medium">Chapters</div>
+        </div>
+        <div>
+          <div class="text-3xl font-bold text-white mb-1">24k</div>
+          <div class="text-sm text-gray-500 uppercase tracking-wider font-medium">Words</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Novels Grid -->
+    <div>
+      <div class="flex items-center justify-between mb-6">
+        <h2 class="text-2xl font-bold text-white flex items-center gap-3 font-display">
+          <span class="w-2 h-8 rounded-full bg-neon-blue shadow-[0_0_10px_rgba(0,240,255,0.5)]"></span>
+          Your Novels
+        </h2>
+        
+        <div class="flex items-center gap-2">
+           <button 
               v-if="!isSelectionMode && novels.length > 0" 
-              link 
-              type="primary" 
               @click="isSelectionMode = true"
+              class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1 rounded-lg hover:bg-white/5 flex items-center gap-1"
             >
-              批量管理
-            </el-button>
-            <el-button type="primary" @click="showCreateDialog = true">
-              <el-icon><Plus /></el-icon>
-              新建小说
-            </el-button>
+              <el-icon><Setting /></el-icon>
+              Manage
+            </button>
+            <template v-if="isSelectionMode">
+               <span class="text-sm text-gray-400 mr-2">Selected: {{ selectedNovels.length }}</span>
+               <button 
+                  @click="handleBatchDelete"
+                  :disabled="selectedNovels.length === 0"
+                  class="text-sm text-red-400 hover:text-red-300 transition-colors px-3 py-1 rounded-lg hover:bg-red-500/10 disabled:opacity-50 flex items-center gap-1"
+               >
+                 <el-icon><Delete /></el-icon>
+                 Delete
+               </button>
+               <button 
+                  @click="cancelSelection"
+                  class="text-sm text-gray-400 hover:text-white transition-colors px-3 py-1 rounded-lg hover:bg-white/5"
+               >
+                 Cancel
+               </button>
+            </template>
+        </div>
+      </div>
+
+      <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+         <div v-for="i in 3" :key="i" class="h-72 rounded-2xl bg-white/5 animate-pulse border border-white/5"></div>
+      </div>
+
+      <div v-else-if="novels.length === 0" class="flex flex-col items-center justify-center py-20 border-2 border-dashed border-white/5 rounded-3xl bg-white/[0.02]">
+        <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 text-gray-600">
+           <el-icon size="32"><Notebook /></el-icon>
+        </div>
+        <h3 class="text-xl font-medium text-white mb-2">No novels yet</h3>
+        <p class="text-gray-500 mb-6">Start your first masterpiece today.</p>
+        <button @click="showCreateDialog = true" class="btn-primary">Create Novel</button>
+      </div>
+
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div 
+          v-for="novel in novels" 
+          :key="novel.id"
+          @click="handleNovelClick(novel)"
+          class="glass-card group relative p-6 rounded-2xl flex flex-col h-[280px] cursor-pointer overflow-hidden"
+          :class="{ 'ring-2 ring-neon-blue bg-space-800/50': selectedNovels.includes(novel.id) }"
+        >
+          <!-- Gradient overlay on hover -->
+          <div class="absolute inset-0 bg-gradient-to-br from-neon-blue/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+          
+          <div class="relative z-10 flex flex-col h-full">
+            <div class="flex justify-between items-start mb-4">
+              <div class="flex gap-2">
+                 <span v-if="novel.genre" class="px-2 py-1 rounded-md bg-neon-blue/10 text-neon-blue text-xs font-medium border border-neon-blue/20 backdrop-blur-sm">
+                   {{ novel.genre }}
+                 </span>
+                 <span v-if="novel.tone" class="px-2 py-1 rounded-md bg-purple-500/10 text-purple-400 text-xs font-medium border border-purple-500/20 backdrop-blur-sm">
+                   {{ novel.tone }}
+                 </span>
+              </div>
+              
+              <!-- Selection Checkbox -->
+              <div v-if="isSelectionMode" @click.stop class="bg-space-900 rounded-full p-1 z-20">
+                <el-checkbox 
+                  :model-value="selectedNovels.includes(novel.id)"
+                  @change="toggleSelection(novel.id)"
+                />
+              </div>
+              
+               <!-- Delete button (hover) -->
+              <button 
+                v-if="!isSelectionMode"
+                @click.stop="handleDeleteNovel(novel)"
+                class="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-500 hover:text-red-400 hover:bg-white/5 rounded-lg z-20"
+              >
+                <el-icon><Delete /></el-icon>
+              </button>
+            </div>
+
+            <h3 class="text-xl font-bold text-white mb-3 line-clamp-1 group-hover:text-neon-blue transition-colors font-display">
+              {{ novel.title }}
+            </h3>
+            
+            <p class="text-gray-400 text-sm leading-relaxed line-clamp-4 flex-1 mb-4 font-light">
+              {{ novel.premise || 'No premise defined yet...' }}
+            </p>
+
+            <div class="flex items-center justify-between text-xs text-gray-500 border-t border-white/5 pt-4 mt-auto">
+              <div class="flex items-center gap-1">
+                <el-icon><Clock /></el-icon>
+                <span>Updated recently</span>
+              </div>
+              <div class="flex items-center gap-1 group-hover:translate-x-1 transition-transform text-neon-blue/80">
+                <span>Open</span>
+                <el-icon><ArrowRight /></el-icon>
+              </div>
+            </div>
           </div>
         </div>
-      </template>
 
-      <div v-if="loading" class="loading-container">
-        <el-skeleton :rows="5" animated />
-      </div>
-
-      <div v-else-if="novels.length === 0" class="empty-state">
-        <el-empty description="还没有小说，点击新建开始创作" />
-      </div>
-
-      <div v-else class="novel-grid">
-        <el-card
-          v-for="novel in novels"
-          :key="novel.id"
-          class="novel-card"
-          :class="{ 'is-selected': selectedNovels.includes(novel.id) }"
-          shadow="hover"
-          @click="handleNovelClick(novel)"
+        <!-- Add Card -->
+        <div 
+          @click="showCreateDialog = true"
+          class="rounded-2xl border-2 border-dashed border-white/10 flex flex-col items-center justify-center h-[280px] cursor-pointer hover:border-neon-blue/50 hover:bg-white/[0.02] transition-all group"
         >
-          <!-- 选择模式下的遮罩层 -->
-          <div v-if="isSelectionMode" class="selection-overlay">
-            <el-checkbox 
-              :model-value="selectedNovels.includes(novel.id)"
-              @change="toggleSelection(novel.id)"
-              @click.stop
-            />
+          <div class="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4 text-gray-500 group-hover:text-neon-blue group-hover:scale-110 transition-all group-hover:shadow-[0_0_20px_rgba(0,240,255,0.2)]">
+            <el-icon size="32"><Plus /></el-icon>
           </div>
-
-          <div class="card-header">
-            <h3>{{ novel.title }}</h3>
-            <!-- 非选择模式下显示单个删除按钮 -->
-            <el-button 
-              v-if="!isSelectionMode"
-              type="danger" 
-              link 
-              :icon="Delete" 
-              @click.stop="handleDeleteNovel(novel)"
-              class="delete-btn"
-            />
-          </div>
-          <p class="novel-premise">{{ novel.premise || '暂无简介' }}</p>
-          <div class="novel-meta">
-            <el-tag size="small" effect="plain">{{ novel.genre || '未分类' }}</el-tag>
-            <el-tag size="small" type="info" effect="plain">{{ novel.tone || '未设定' }}</el-tag>
-          </div>
-        </el-card>
-        
-        <el-card class="add-card" shadow="hover" @click="showCreateDialog = true">
-          <div class="add-content">
-            <el-icon :size="32"><Plus /></el-icon>
-            <span>新建小说</span>
-          </div>
-        </el-card>
+          <span class="text-gray-400 font-medium group-hover:text-white transition-colors">Create New Novel</span>
+        </div>
       </div>
-    </el-card>
+    </div>
 
-    <!-- 新建小说对话框 -->
-    <el-dialog v-model="showCreateDialog" title="创建新小说" width="500px">
-      <el-form :model="newNovel" label-width="80px">
-        <el-form-item label="标题">
-          <el-input v-model="newNovel.title" placeholder="输入小说标题" />
+    <!-- Create Dialog -->
+    <el-dialog v-model="showCreateDialog" title="Create New Novel" width="500px" class="glass-dialog-override" destroy-on-close>
+      <el-form :model="newNovel" label-position="top" class="mt-2">
+        <el-form-item label="Title">
+          <el-input v-model="newNovel.title" placeholder="Enter novel title" />
         </el-form-item>
-        <el-form-item label="故事核">
+        <el-form-item label="Premise">
           <el-input
             v-model="newNovel.premise"
             type="textarea"
-            :rows="3"
-            placeholder="一句话概括你的故事"
+            :rows="4"
+            placeholder="What is your story about?"
           />
         </el-form-item>
-        <el-form-item label="题材">
-          <el-select v-model="newNovel.genre" placeholder="选择题材">
-            <el-option label="玄幻" value="玄幻" />
-            <el-option label="科幻" value="科幻" />
-            <el-option label="言情" value="言情" />
-            <el-option label="悬疑" value="悬疑" />
-            <el-option label="都市" value="都市" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="风格">
-          <el-select v-model="newNovel.tone" placeholder="选择风格">
-            <el-option label="严肃" value="严肃" />
-            <el-option label="幽默" value="幽默" />
-            <el-option label="黑暗" value="黑暗" />
-            <el-option label="轻松" value="轻松" />
-          </el-select>
-        </el-form-item>
+        <div class="grid grid-cols-2 gap-4">
+           <el-form-item label="Genre">
+            <el-select v-model="newNovel.genre" placeholder="Select Genre" class="w-full">
+              <el-option label="玄幻 (Fantasy)" value="玄幻" />
+              <el-option label="科幻 (Sci-Fi)" value="科幻" />
+              <el-option label="言情 (Romance)" value="言情" />
+              <el-option label="悬疑 (Mystery)" value="悬疑" />
+              <el-option label="都市 (Urban)" value="都市" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="Tone">
+            <el-select v-model="newNovel.tone" placeholder="Select Tone" class="w-full">
+              <el-option label="严肃 (Serious)" value="严肃" />
+              <el-option label="幽默 (Humorous)" value="幽默" />
+              <el-option label="黑暗 (Dark)" value="黑暗" />
+              <el-option label="轻松 (Light)" value="轻松" />
+            </el-select>
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
-        <el-button @click="showCreateDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleCreateNovel" :loading="creating">
-          创建
-        </el-button>
+        <div class="flex justify-end gap-3">
+          <el-button @click="showCreateDialog = false">Cancel</el-button>
+          <el-button type="primary" @click="handleCreateNovel" :loading="creating">
+            Create Novel
+          </el-button>
+        </div>
       </template>
     </el-dialog>
   </div>
@@ -140,7 +214,7 @@
 import { ref, onMounted } from 'vue'
 import { novelApi } from '@/api'
 import { useRouter } from 'vue-router'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Delete, Document, Notebook, Clock, ArrowRight, Setting } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
@@ -267,180 +341,6 @@ onMounted(() => {
 })
 </script>
 
-<style lang="scss" scoped>
-.home-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.novel-list-card {
-  min-height: 500px;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  
-  .left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 16px;
-    font-weight: bold;
-  }
-  
-  .right {
-    display: flex;
-    gap: 12px;
-  }
-}
-
-.novel-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-  padding: 20px 0;
-}
-
-.novel-card {
-  height: 180px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  border-radius: 12px;
-  border: 1px solid #ebeef5;
-  overflow: hidden;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
-    border-color: #dcdfe6;
-
-    .delete-btn {
-      opacity: 1;
-    }
-  }
-
-  &.is-selected {
-    border-color: #409eff;
-    background-color: #ecf5ff;
-    transform: translateY(-4px);
-  }
-
-  :deep(.el-card__body) {
-    height: 100%;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    box-sizing: border-box;
-  }
-
-  .selection-overlay {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    z-index: 20;
-  }
-
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 12px;
-    width: 100%;
-
-    h3 {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #303133;
-      line-height: 1.4;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      flex: 1;
-      padding-right: 8px; 
-    }
-
-    .delete-btn {
-      flex-shrink: 0;
-      opacity: 0;
-      transition: opacity 0.2s;
-      padding: 8px;
-      margin-top: -8px;
-      margin-right: -8px;
-      z-index: 10;
-    }
-  }
-
-  &:hover .delete-btn {
-    opacity: 1;
-  }
-
-  .novel-premise {
-    font-size: 14px;
-    color: #606266;
-    line-height: 1.6;
-    margin: 0 0 16px;
-    flex: 1;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .novel-meta {
-    display: flex;
-    gap: 8px;
-    margin-top: auto;
-  }
-}
-
-.add-card {
-  height: 180px;
-  cursor: pointer;
-  border: 2px dashed #dcdfe6;
-  background-color: #fcfcfc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  transition: all 0.3s;
-
-  &:hover {
-    border-color: #409eff;
-    color: #409eff;
-    background-color: #ecf5ff;
-  }
-
-  :deep(.el-card__body) {
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .add-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    color: #909399;
-    
-    span {
-      font-size: 16px;
-    }
-  }
-}
-
-.empty-state {
-  padding: 80px 0;
-}
+<style scoped>
+/* Scoped overrides if needed, but relying mostly on Tailwind global classes */
 </style>
