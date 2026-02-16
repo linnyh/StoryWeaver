@@ -58,4 +58,8 @@ export const loreApi = {
   delete: (id) => api.delete(`/lore/${id}`)
 }
 
+export const relationshipApi = {
+  list: (novelId) => api.get('/relationships/', { params: { novel_id: novelId } })
+}
+
 export default api

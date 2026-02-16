@@ -11,7 +11,46 @@ from app.database import get_db
 from app.models import Chapter, Novel, Scene
 from app.services import outline_generator, scene_generator
 
+from pydantic import BaseModel
+
 router = APIRouter()
+
+
+class ChapterResponse(BaseModel):
+    id: str
+    novel_id: str
+    order_index: int
+    title: Optional[str]
+    summary: Optional[str]
+    scene_count: Optional[int] = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ChapterCreate(BaseModel):
+    novel_id: str
+    order_index: int
+    title: str
+    summary: Optional[str] = None
+
+@router.post("/", response_model=ChapterResponse)
+async def create_chapter(
+    chapter: ChapterCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """创建章节"""
+    # 验证小说存在
+    result = await db.execute(select(Novel).where(Novel.id == chapter.novel_id))
+    novel = result.scalar_one_or_none()
+    if not novel:
+        raise HTTPException(status_code=404, detail="Novel not found")
+
+    db_chapter = Chapter(**chapter.model_dump())
+    db.add(db_chapter)
+    await db.commit()
+    await db.refresh(db_chapter)
+    return db_chapter
 
 
 @router.get("/")
@@ -83,6 +122,8 @@ async def generate_beats(
 2. 绝对不要重复“前情提要”中的剧情。
 3. 每个场景包含：地点、出场人物、动作指令（Beat）。
 4. 动作指令要具体，包含冲突和推进。
+5. **张力与情绪控制**：请为每个场景规划“张力等级”（tension_level，1-10）和“情绪目标”（emotional_target）。
+   - 张力曲线应有起伏，例如：平缓铺垫(3) -> 遭遇打压(8) -> 绝地反击(10)。
 
 请直接输出 JSON 格式的数组，不要包含任何 markdown 格式标记或其他文字。
 格式示例：
@@ -90,7 +131,9 @@ async def generate_beats(
   {{
     "location": "青云门广场",
     "characters_present": ["林昊", "秦霜"],
-    "beat_description": "林昊在擂台上与秦霜对峙，周围弟子议论纷纷，气氛紧张。"
+    "beat_description": "林昊在擂台上与秦霜对峙，周围弟子议论纷纷，气氛紧张。",
+    "tension_level": 7,
+    "emotional_target": "展示主角被轻视后的压抑怒火"
   }}
 ]
 """
@@ -114,6 +157,8 @@ async def generate_beats(
             location=scene_data["location"],
             characters_present=scene_data.get("characters_present", []),
             beat_description=scene_data["beat_description"],
+            tension_level=scene_data.get("tension_level", 5),
+            emotional_target=scene_data.get("emotional_target", ""),
             status="draft"
         )
         db.add(scene)
@@ -265,6 +310,8 @@ def parse_beats_response(response: str, num_beats: int = 5) -> List[Dict[str, An
                     "location": item.get("location", ""),
                     "characters_present": item.get("characters_present", []),
                     "beat_description": item.get("beat_description", ""),
+                    "tension_level": item.get("tension_level", 5),
+                    "emotional_target": item.get("emotional_target", ""),
                     "status": "draft"
                 }
                 for item in json_data
@@ -276,6 +323,8 @@ def parse_beats_response(response: str, num_beats: int = 5) -> List[Dict[str, An
                     "location": item.get("location", ""),
                     "characters_present": item.get("characters_present", []),
                     "beat_description": item.get("beat_description", ""),
+                    "tension_level": item.get("tension_level", 5),
+                    "emotional_target": item.get("emotional_target", ""),
                     "status": "draft"
                 }
                 for item in json_data["scenes"]
@@ -284,9 +333,13 @@ def parse_beats_response(response: str, num_beats: int = 5) -> List[Dict[str, An
     except json.JSONDecodeError:
         pass # 继续使用原有文本解析逻辑
 
-    # 按行解析
+    # 按行解析 (Fallback, usually simpler, ignoring tension for now if json fails)
     lines = response.strip().split('\n')
-
+    
+    # ... (Keep existing line parsing as fallback, but it won't extract tension/emotion well)
+    # Given we enforce JSON in prompt, JSON failure usually means bad output.
+    # We'll just return what we can from line parsing.
+    
     for line in lines:
         line = line.strip()
         if not line or len(line) < 4:
@@ -326,6 +379,8 @@ def parse_beats_response(response: str, num_beats: int = 5) -> List[Dict[str, An
                     "location": location,
                     "characters_present": characters,
                     "beat_description": beat_desc,
+                    "tension_level": 5, # Default
+                    "emotional_target": "", # Default
                     "status": "draft"
                 })
 

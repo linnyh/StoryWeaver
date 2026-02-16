@@ -30,3 +30,4 @@ aiohttp==3.9.1
 
 # Utilities
 uuid==1.30
+greenlet

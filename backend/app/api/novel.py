@@ -2,11 +2,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional, List
 from app.database import get_db
-from app.models import Novel, Chapter, Character, Lore, Scene
+from app.models import Novel, Chapter, Character, Lore, Scene, Relationship
 from app.services import outline_generator
+from app.api.relationship import RelationshipResponse
 
 router = APIRouter()
 
@@ -377,3 +379,20 @@ async def generate_outline(
         await db.refresh(lore)
 
     return created_chapters
+
+
+@router.get("/{novel_id}/relationships", response_model=List[RelationshipResponse])
+async def list_relationships(novel_id: str, db: AsyncSession = Depends(get_db)):
+    """获取小说的人际关系"""
+    # Eager load characters to get names
+    stmt = (
+        select(Relationship)
+        .where(Relationship.novel_id == novel_id)
+        .options(
+            selectinload(Relationship.character_a),
+            selectinload(Relationship.character_b)
+        )
+    )
+    result = await db.execute(stmt)
+    rels = result.scalars().all()
+    return rels

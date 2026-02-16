@@ -1,6 +1,7 @@
 """数据库连接配置"""
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
+import sqlalchemy
 import os
 
 DATABASE_URL = os.getenv(
@@ -26,4 +27,6 @@ async def get_db():
 async def init_db():
     """初始化数据库表"""
     async with engine.begin() as conn:
+        # Enable WAL mode for better concurrency
+        await conn.execute(sqlalchemy.text("PRAGMA journal_mode=WAL;"))
         await conn.run_sync(Base.metadata.create_all)

@@ -1,5 +1,6 @@
 import json
 import re
+import asyncio
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -9,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 
 from app.database import get_db, AsyncSessionLocal
-from app.models import Scene, Chapter
-from app.services import scene_generator, summarizer
+from app.models import Scene, Chapter, Character, Novel, Relationship
+from app.services import scene_generator, summarizer, state_analyzer, relationship_analyzer
 from app.rag import rag_service
 from app.api.scene_chat import router as chat_router
 
@@ -18,6 +19,9 @@ class SceneUpdateRequest(BaseModel):
     content: Optional[str] = None
     summary: Optional[str] = None
     status: Optional[str] = None
+    tension_level: Optional[int] = None
+    emotional_target: Optional[str] = None
+    characters_present: Optional[list[str]] = None
 
 class SceneDetailResponse(BaseModel):
     id: str
@@ -30,6 +34,8 @@ class SceneDetailResponse(BaseModel):
     summary: Optional[str] = None
     status: Optional[str] = None
     context_summary: Optional[str] = None 
+    tension_level: Optional[int] = None
+    emotional_target: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -37,6 +43,114 @@ class SceneDetailResponse(BaseModel):
 router = APIRouter()
 router.include_router(chat_router)
 
+
+
+async def background_analyze_state(scene_id: str):
+    """后台任务：分析角色状态变化 & 角色关系变化"""
+    print(f"Starting background state/relationship analysis for scene {scene_id}")
+    async with AsyncSessionLocal() as db:
+        try:
+            # 联合查询 Scene 和 Chapter, Novel 以获取 genre
+            stmt = (
+                select(Scene, Chapter, Novel)
+                .join(Chapter, Scene.chapter_id == Chapter.id)
+                .join(Novel, Chapter.novel_id == Novel.id)
+                .where(Scene.id == scene_id)
+            )
+            result = await db.execute(stmt)
+            row = result.first()
+            
+            if not row:
+                return
+                
+            scene, chapter, novel = row
+            
+            if not scene.content or not scene.characters_present:
+                return
+
+            # 收集参与场景的角色对象
+            characters = []
+            
+            # 1. 分析个人状态 (Power State)
+            for char_id in scene.characters_present:
+                # 获取角色
+                char_result = await db.execute(select(Character).where(Character.id == char_id))
+                character = char_result.scalar_one_or_none()
+                if not character:
+                    continue
+                
+                characters.append(character)
+                
+                # 分析状态
+                print(f"Analyzing state for character {character.name} in scene {scene_id} (Genre: {novel.genre})...")
+                new_state = await state_analyzer.analyze_state(character, scene.content, genre=novel.genre or "玄幻")
+                
+                if new_state:
+                    print(f"Updating state for {character.name}: {new_state}")
+                    character.power_state = new_state
+                    db.add(character)
+            
+            # 2. 分析角色关系 (Relationships)
+            if len(characters) >= 2:
+                from sqlalchemy import or_, and_
+                char_ids = [c.id for c in characters]
+                
+                # 获取现有的关系记录
+                stmt = select(Relationship).where(
+                    and_(
+                        Relationship.character_a_id.in_(char_ids),
+                        Relationship.character_b_id.in_(char_ids)
+                    )
+                )
+                rels_result = await db.execute(stmt)
+                existing_rels = rels_result.scalars().all()
+                
+                # 建立映射 key = "id_a:id_b" (确保 id_a < id_b)
+                rels_map = {}
+                for r in existing_rels:
+                    key = f"{r.character_a_id}:{r.character_b_id}"
+                    rels_map[key] = r
+                
+                # 调用 AI 分析
+                print(f"Analyzing relationships for {len(characters)} characters...")
+                updates = await relationship_analyzer.analyze_relationships(
+                    scene.content, characters, rels_map
+                )
+                
+                # 应用更新
+                for update in updates:
+                    id_a = update["char_a_id"]
+                    id_b = update["char_b_id"]
+                    # 确保顺序一致
+                    id_a, id_b = sorted([id_a, id_b])
+                    key = f"{id_a}:{id_b}"
+                    
+                    rel = rels_map.get(key)
+                    if not rel:
+                        # 创建新关系
+                        rel = Relationship(
+                            novel_id=novel.id,
+                            character_a_id=id_a,
+                            character_b_id=id_b,
+                            affinity_score=0
+                        )
+                        db.add(rel)
+                    
+                    # 更新字段
+                    change = update.get("affinity_change", 0)
+                    if change != 0:
+                        rel.affinity_score = max(-100, min(100, rel.affinity_score + change))
+                    
+                    if update.get("new_conflict"):
+                        rel.core_conflict = update["new_conflict"]
+                        
+                    print(f"Updated relationship {id_a}<->{id_b}: Affinity {rel.affinity_score} (Delta {change})")
+
+            await db.commit()
+            print(f"Finished state & relationship analysis for scene {scene_id}")
+            
+        except Exception as e:
+            print(f"Error in background_analyze_state for scene {scene_id}: {str(e)}")
 
 
 async def background_summarize(scene_id: str):
@@ -142,6 +256,11 @@ async def generate_scene_content(
             scene.content = clean_content.strip()
             await db.commit()
 
+            # 触发后台状态分析 (Fire-and-forget)
+            # 注意：这里我们不能使用 BackgroundTasks，因为这是在 StreamingResponse 的生成器内部
+            # 使用 asyncio.create_task 来异步执行
+            asyncio.create_task(background_analyze_state(scene_id))
+
             # 发送完成信号
             yield f"data: {json.dumps({'done': True, 'scene_id': scene_id})}\n\n"
 
@@ -243,12 +362,21 @@ async def update_scene(
         should_update_rag_only = True
         should_auto_summarize = False # 手动更新优先
         
+    # 只要更新了内容或角色列表，就应该触发状态分析
+    should_analyze_state = False
+    if update_data.get("content") or update_data.get("characters_present"):
+        should_analyze_state = True
+
     if should_update_rag_only:
         # 直接更新 RAG
         background_tasks.add_task(background_update_rag, scene_id, scene.summary)
     elif should_auto_summarize:
         # 自动生成摘要并更新 RAG
         background_tasks.add_task(background_summarize, scene_id)
+        
+    if should_analyze_state or should_update_rag_only or should_auto_summarize:
+        # 自动分析角色状态
+        background_tasks.add_task(background_analyze_state, scene_id)
         
     return scene
 

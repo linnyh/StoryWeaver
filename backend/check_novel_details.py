@@ -8,32 +8,23 @@ async def check_novel_details():
     db_gen = get_db()
     db = await anext(db_gen)
     try:
-        novel_id_str = "902b171e-a5d0-4e7d-a916-428d86721aa0"
-        
-        # Check Novel
-        result = await db.execute(select(Novel).where(Novel.id == novel_id_str))
+        result = await db.execute(select(Novel).where(Novel.id == "902b171e-a5d0-4e7d-a916-428d86721aa0"))
         novel = result.scalar_one_or_none()
         
         if novel:
             print(f"Novel found: {novel.title}")
-            print(f"ID: {novel.id}")
             
-            # Check Chapters
-            chapters_res = await db.execute(select(Chapter).where(Chapter.novel_id == novel_id_str))
-            chapters = chapters_res.scalars().all()
-            print(f"Chapters count: {len(chapters)}")
-            for ch in chapters:
-                print(f"  - {ch.title} (Index: {ch.order_index})")
-                
             # Check Characters
-            chars_res = await db.execute(select(Character).where(Character.novel_id == novel_id_str))
+            chars_res = await db.execute(select(Character).where(Character.novel_id == novel.id))
             chars = chars_res.scalars().all()
             print(f"Characters count: {len(chars)}")
-            
-            # Check Lore
-            lore_res = await db.execute(select(Lore).where(Lore.novel_id == novel_id_str))
-            lores = lore_res.scalars().all()
-            print(f"Lore count: {len(lores)}")
+            for char in chars:
+                print(f"  - {char.name}")
+                print(f"    Role: {char.role}")
+                print(f"    Bio: {char.bio}")
+                print(f"    Personality: {char.personality}")
+                print(f"    Appearance: {char.appearance}")
+                print("-" * 20)
             
         else:
             print("Novel not found in database.")

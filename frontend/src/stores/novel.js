@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { novelApi, chapterApi, sceneApi, characterApi, loreApi } from '@/api'
+import { novelApi, chapterApi, sceneApi, characterApi, loreApi, relationshipApi } from '@/api'
 
 export const useNovelStore = defineStore('novel', () => {
   // 状态
   const currentNovel = ref(null)
   const chapters = ref([])
   const characters = ref([])
+  const relationships = ref([])
   const lores = ref([])
   const currentChapter = ref(null)
   const currentScene = ref(null)
@@ -30,6 +31,13 @@ export const useNovelStore = defineStore('novel', () => {
   async function loadCharacters(novelId) {
     const { data } = await characterApi.list(novelId)
     characters.value = data
+    return data
+  }
+
+  // 加载关系列表
+  async function loadRelationships(novelId) {
+    const { data } = await relationshipApi.list(novelId)
+    relationships.value = data
     return data
   }
 
@@ -104,6 +112,7 @@ export const useNovelStore = defineStore('novel', () => {
     currentNovel.value = null
     chapters.value = []
     characters.value = []
+    relationships.value = []
     lores.value = []
     currentChapter.value = null
     currentScene.value = null
@@ -122,6 +131,8 @@ export const useNovelStore = defineStore('novel', () => {
     loadChapters,
     loadCharacters,
     loadLores,
+    relationships,
+    loadRelationships,
     loadScenes,
     generateOutline,
     generateBeats,
