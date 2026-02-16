@@ -19,6 +19,7 @@ class NovelCreate(BaseModel):
     genre: Optional[str] = None
     tone: Optional[str] = None
     worldbuilding: Optional[str] = None
+    philosophical_theme: Optional[str] = None
 
 
 class NovelUpdate(BaseModel):
@@ -27,6 +28,7 @@ class NovelUpdate(BaseModel):
     genre: Optional[str] = None
     tone: Optional[str] = None
     worldbuilding: Optional[str] = None
+    philosophical_theme: Optional[str] = None
 
 
 class NovelResponse(BaseModel):
@@ -36,6 +38,7 @@ class NovelResponse(BaseModel):
     genre: Optional[str]
     tone: Optional[str]
     worldbuilding: Optional[str]
+    philosophical_theme: Optional[str]
 
     class Config:
         from_attributes = True
