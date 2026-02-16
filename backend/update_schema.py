@@ -31,6 +31,10 @@ def main():
     add_column(cursor, "scenes", "tension_level INTEGER")
     add_column(cursor, "scenes", "emotional_target TEXT")
 
+    # Module 3: Philosophical Editorial Room
+    # Novel table update
+    add_column(cursor, "novels", "philosophical_theme TEXT")
+
     conn.commit()
     conn.close()
     print("Database schema updated successfully.")

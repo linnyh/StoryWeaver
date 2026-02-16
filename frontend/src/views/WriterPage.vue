@@ -57,12 +57,33 @@
             {{ generating ? 'Writing...' : 'AI Continue' }}
           </button>
           
+          <!-- Editorial Toggle -->
+          <el-tooltip content="Toggle Editorial Committee Review" placement="bottom">
+             <button
+                @click="enableEditorial = !enableEditorial"
+                class="px-2 py-1.5 rounded-lg border transition-colors flex items-center gap-1"
+                :class="enableEditorial ? 'bg-neon-blue/10 border-neon-blue/20 text-neon-blue' : 'bg-white/5 border-white/5 text-gray-400 hover:text-gray-200'"
+             >
+               <el-icon><DataAnalysis /></el-icon>
+               <span class="text-[10px] font-medium">{{ enableEditorial ? 'Review: ON' : 'Review: OFF' }}</span>
+             </button>
+          </el-tooltip>
+          
           <button 
             @click="handleSave" 
             :disabled="saving"
             class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-xs font-medium text-gray-300 transition-colors disabled:opacity-50"
           >
             Save
+          </button>
+          
+          <button 
+            v-if="editorialLogs.length > 0"
+            @click="showLogs = true"
+            class="px-3 py-1.5 rounded-lg bg-neon-blue/10 hover:bg-neon-blue/20 border border-neon-blue/20 text-xs font-medium text-neon-blue transition-colors flex items-center gap-1"
+          >
+            <el-icon><DataAnalysis /></el-icon>
+            Logs
           </button>
           
           <button 
@@ -75,6 +96,26 @@
       </div>
 
       <div class="flex-1 overflow-hidden bg-space-950/30 relative">
+        <!-- System Status Animation -->
+        <transition
+          enter-active-class="transition ease-out duration-300"
+          enter-from-class="opacity-0 -translate-y-2"
+          enter-to-class="opacity-100 translate-y-0"
+          leave-active-class="transition ease-in duration-200"
+          leave-from-class="opacity-100 translate-y-0"
+          leave-to-class="opacity-0 -translate-y-2"
+        >
+          <div v-if="systemStatus" class="absolute top-6 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+             <div class="px-5 py-2.5 rounded-full bg-space-900/80 border border-neon-purple/30 backdrop-blur-xl text-white text-xs font-medium shadow-[0_0_15px_rgba(176,38,255,0.2)] flex items-center gap-3">
+               <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-neon-purple opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-neon-purple"></span>
+                </span>
+               <span class="tracking-wide">{{ systemStatus }}</span>
+             </div>
+          </div>
+        </transition>
+
         <TiptapEditor
           v-model="content"
           :editable="true"
@@ -141,15 +182,65 @@
         </div>
       </div>
     </div>
+    <!-- Editorial Logs Dialog -->
+    <el-dialog
+      v-model="showLogs"
+      title="Editorial Committee Logs"
+      width="600px"
+      :modal-class="'glass-dialog'"
+    >
+      <div class="space-y-4 max-h-[60vh] overflow-y-auto custom-scrollbar p-2">
+        <div 
+          v-for="(log, index) in editorialLogs" 
+          :key="index"
+          class="p-4 rounded-xl bg-white/5 border border-white/5 text-sm leading-relaxed text-gray-300"
+        >
+          <div class="flex items-start gap-3">
+            <span class="mt-1.5 w-2 h-2 rounded-full flex-shrink-0" 
+              :class="{
+                'bg-neon-blue shadow-[0_0_8px_rgba(0,240,255,0.5)]': log.includes('Agent A'),
+                'bg-neon-pink shadow-[0_0_8px_rgba(255,0,128,0.5)]': log.includes('Agent B'),
+                'bg-neon-purple shadow-[0_0_8px_rgba(176,38,255,0.5)]': log.includes('Agent C'),
+                'bg-gray-500': !log.includes('Agent')
+              }"
+            ></span>
+            <span class="whitespace-pre-wrap">{{ log }}</span>
+          </div>
+        </div>
+        <div v-if="editorialLogs.length === 0" class="text-center text-gray-500 py-8">
+          No logs available yet.
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
+
+<style>
+/* Global style for glass dialog */
+.glass-dialog .el-dialog {
+  background: rgba(17, 24, 39, 0.95);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+}
+.glass-dialog .el-dialog__title {
+  color: white;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.glass-dialog .el-dialog__headerbtn .el-dialog__close {
+  color: #9ca3af;
+}
+.glass-dialog .el-dialog__body {
+  padding: 20px;
+}
+</style>
 
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { sceneApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { Location, MagicStick, ArrowLeft, Document, ChatDotRound, Position, Loading } from '@element-plus/icons-vue'
+import { Location, MagicStick, ArrowLeft, Document, ChatDotRound, Position, Loading, DataAnalysis } from '@element-plus/icons-vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 
 import { fetchEventSource } from '@microsoft/fetch-event-source'
@@ -162,6 +253,10 @@ const content = ref('')
 const prevSummary = ref('')
 const generating = ref(false)
 const saving = ref(false)
+const systemStatus = ref('')
+const showLogs = ref(false)
+const editorialLogs = ref([])
+const enableEditorial = ref(true) // 默认开启审稿
 
 const chatMessages = ref([])
 const chatInput = ref('')
@@ -188,23 +283,47 @@ async function handleGenerate() {
 
   content.value = ''
   generating.value = true
+  systemStatus.value = 'Initializing AI...'
+  editorialLogs.value = []
 
   try {
-    const eventSource = new EventSource(`/api/scenes/${currentScene.value.id}/generate`)
+    const url = `/api/scenes/${currentScene.value.id}/generate?enable_editorial=${enableEditorial.value}`
+    const eventSource = new EventSource(url)
 
     eventSource.onmessage = (event) => {
       const data = JSON.parse(event.data)
 
       if (data.chunk) {
+        // Content streaming started, clear system status
+        if (systemStatus.value) {
+          systemStatus.value = ''
+        }
         content.value += data.chunk
+      } else if (data.system) {
+        systemStatus.value = data.system
+      } else if (data.log) {
+        editorialLogs.value.push(data.log)
+        // Auto-show logs if not already shown? Maybe better to just show a notification or update counter
+        // Let's just update the array for now.
       } else if (data.done) {
         eventSource.close()
         generating.value = false
+        systemStatus.value = ''
         ElMessage.success('Generation complete')
         handleSave()
+        
+        if (editorialLogs.value.length > 0) {
+           ElMessage.info({
+             message: 'View editorial logs',
+             type: 'info',
+             showClose: true,
+             onClick: () => { showLogs.value = true }
+           })
+        }
       } else if (data.error) {
         eventSource.close()
         generating.value = false
+        systemStatus.value = ''
         ElMessage.error(data.error)
       }
     }
@@ -212,10 +331,12 @@ async function handleGenerate() {
     eventSource.onerror = () => {
       eventSource.close()
       generating.value = false
+      systemStatus.value = ''
       ElMessage.error('Generation interrupted')
     }
   } catch (error) {
     generating.value = false
+    systemStatus.value = ''
     ElMessage.error('Generation failed')
   }
 }

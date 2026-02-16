@@ -230,6 +230,7 @@ async def get_scene(scene_id: str, db: AsyncSession = Depends(get_db)):
 @router.get("/{scene_id}/generate")
 async def generate_scene_content(
     scene_id: str,
+    enable_editorial: bool = True, # Query param, default True
     db: AsyncSession = Depends(get_db)
 ):
     """生成场景正文 (SSE 流式)"""
@@ -244,10 +245,18 @@ async def generate_scene_content(
         full_content = ""
 
         try:
-            async for chunk in scene_generator.generate_scene_content(scene_id, db):
-                full_content += chunk
-                # 发送 SSE 格式的数据
-                yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+            async for item in scene_generator.generate_scene_content(scene_id, db, enable_editorial=enable_editorial):
+                # item 是字典: {"type": "...", "content": "..."}
+                
+                if item["type"] == "content":
+                    full_content += item["content"]
+                    yield f"data: {json.dumps({'chunk': item['content']})}\n\n"
+                    
+                elif item["type"] == "log":
+                    yield f"data: {json.dumps({'log': item['content']})}\n\n"
+                    
+                elif item["type"] == "system":
+                    yield f"data: {json.dumps({'system': item['content']})}\n\n"
 
             # 保存生成的内容到数据库（过滤思考内容）
             # 先过滤思考内容 (支持多行)
@@ -257,8 +266,6 @@ async def generate_scene_content(
             await db.commit()
 
             # 触发后台状态分析 (Fire-and-forget)
-            # 注意：这里我们不能使用 BackgroundTasks，因为这是在 StreamingResponse 的生成器内部
-            # 使用 asyncio.create_task 来异步执行
             asyncio.create_task(background_analyze_state(scene_id))
 
             # 发送完成信号

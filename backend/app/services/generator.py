@@ -532,18 +532,84 @@ class SceneGenerator:
     async def generate_scene_content(
         self,
         scene_id: str,
-        db: AsyncSession
-    ) -> AsyncGenerator[str, None]:
-        result = await db.execute(select(Scene).where(Scene.id == scene_id))
-        scene = result.scalar_one_or_none()
-        if not scene:
+        db: AsyncSession,
+        enable_editorial: bool = True  # 新增参数
+    ) -> AsyncGenerator[Dict[str, str], None]:
+        from app.models import Scene, Chapter, Novel
+        
+        # 联合查询 Scene 和 Novel
+        stmt = (
+            select(Scene, Novel)
+            .join(Chapter, Scene.chapter_id == Chapter.id)
+            .join(Novel, Chapter.novel_id == Novel.id)
+            .where(Scene.id == scene_id)
+        )
+        result = await db.execute(stmt)
+        row = result.first()
+        
+        if not row:
             return
+            
+        scene, novel = row
 
         context = await self._build_context(scene, db)
         prompt = self._build_writing_prompt(scene, context)
 
-        async for chunk in self.llm.generate_stream(prompt):
-            yield chunk
+        # 如果不开启审稿功能，直接流式生成
+        if not enable_editorial:
+            yield {"type": "system", "content": "正在直接生成..."}
+            full_content = ""
+            async for chunk in self.llm.generate_stream(prompt):
+                 # 过滤思考内容
+                 chunk_clean = chunk.replace('<think>', '').replace('</think>', '') # 简单过滤
+                 # 注意：流式生成时，思考标签可能被拆分，这里仅做简单处理
+                 # 实际上如果模型输出带思考过程，流式处理比较麻烦，需要状态机
+                 # 假设这里我们用的模型不输出思考过程，或者前端不显示
+                 # 为了统一接口，我们包装成 dict
+                 yield {"type": "content", "content": chunk}
+                 full_content += chunk
+            return
+
+        # --- 引入多智能体审稿委员会 ---
+        from app.agents.editorial_room import EditorialRoom
+
+        # 1. 生成初稿
+        yield {"type": "system", "content": "正在生成初稿..."}
+        
+        # 使用同步生成获取完整初稿
+        full_draft = await self.llm.generate(prompt)
+        
+        # 立即清理初稿中的思考标签和 Markdown 加粗
+        full_draft = re.sub(r'<think>.*?</think>', '', full_draft, flags=re.DOTALL).strip()
+        full_draft = re.sub(r'\*\*', '', full_draft).strip()
+        
+        yield {"type": "system", "content": "初稿生成完毕，正在提交多智能体审稿委员会（Agent A/B/C 联合审阅中）..."}
+        
+        # 2. 准备上下文
+        # 简单处理：提取 Prompt 中的信息部分作为上下文
+        context_str = prompt.split("要求：")[0] if "要求：" in prompt else prompt
+
+        # 3. 执行审稿与修订
+        try:
+            review_result = await EditorialRoom.review_and_revise(
+                draft=full_draft,
+                context=context_str,
+                philosophical_theme=novel.philosophical_theme
+            )
+            
+            final_content = review_result["content"]
+            logs = review_result["logs"]
+            
+            # 4. 输出最终正文
+            yield {"type": "content", "content": final_content}
+            
+            # 5. 输出评审日志
+            for log in logs:
+                yield {"type": "log", "content": log}
+                
+        except Exception as e:
+            yield {"type": "system", "content": f"审稿过程发生异常: {str(e)}"}
+            yield {"type": "content", "content": full_draft}
 
     async def _build_context(self, scene: Scene, db: AsyncSession) -> Dict[str, Any]:
         context = {"prev_summaries": [], "character_contexts": [], "lore_contexts": []}

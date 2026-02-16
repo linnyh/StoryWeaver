@@ -14,6 +14,7 @@ class Novel(Base):
     premise = Column(Text, nullable=True)  # 一句话故事核
     genre = Column(String(50), nullable=True)  # 玄幻/科幻/言情等
     tone = Column(String(50), nullable=True)  # 幽默/严肃/黑暗
+    philosophical_theme = Column(Text, nullable=True)  # 哲学思想内核
     worldbuilding = Column(Text, nullable=True)  # 世界观设定
 
     def __repr__(self):
