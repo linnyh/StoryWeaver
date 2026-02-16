@@ -8,7 +8,7 @@ if "SSLKEYLOGFILE" in os.environ:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import novel, character, chapter, scene, lore, settings
+from app.api import novel, character, chapter, scene, lore, settings, relationship
 from app.models import Lore, SystemConfig  # 导入模型以创建数据库表
 from app.database import init_db
 
@@ -34,6 +34,7 @@ app.include_router(chapter.router, prefix="/api/chapters", tags=["Chapter"])
 app.include_router(scene.router, prefix="/api/scenes", tags=["Scene"])
 app.include_router(lore.router, prefix="/api/lore", tags=["Lore"])
 app.include_router(settings.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(relationship.router, prefix="/api/relationships", tags=["Relationship"])
 
 
 @app.get("/")

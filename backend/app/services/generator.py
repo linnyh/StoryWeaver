@@ -6,10 +6,10 @@ import os
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import aiohttp
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Character, Scene
+from app.models import Character, Scene, Relationship
 from app.rag import rag_service
 from app.config import settings
 
@@ -167,7 +167,11 @@ class LLMClient:
         """同步生成文本"""
         if not self.client:
             return self._mock_response(prompt)
-        return await self.client.generate(prompt)
+        try:
+            return await self.client.generate(prompt)
+        except Exception as e:
+            print(f"Error generating text: {e}")
+            return ""
 
     async def generate_stream(self, prompt: str) -> AsyncGenerator[str, None]:
         """流式生成文本"""
@@ -243,7 +247,70 @@ class OutlineGenerator:
         prompt = self._build_outline_prompt(premise, genre, tone, num_chapters)
         response = await self.llm.generate(prompt)
         result = self._parse_outline_response(response, novel_id, num_chapters)
+        
+        # 检查章节数量是否足够，如果不够则尝试补充
+        chapters = result.get("chapters", [])
+        if chapters and len(chapters) < num_chapters:
+            print(f"Warning: Generated only {len(chapters)} chapters, expected {num_chapters}. Attempting to extend...")
+            # 简单的补充逻辑：让 AI 继续生成后续章节
+            # 这里我们只尝试一次补充，避免死循环
+            try:
+                extension = await self._extend_chapters(chapters, premise, genre, tone, num_chapters)
+                if extension:
+                    # 重新计算 order_index
+                    start_index = len(chapters) + 1
+                    for i, ch in enumerate(extension):
+                        ch["order_index"] = start_index + i
+                    chapters.extend(extension)
+                    result["chapters"] = chapters
+            except Exception as e:
+                print(f"Error extending chapters: {e}")
+                
         return result
+
+    async def _extend_chapters(self, existing_chapters: List[Dict], premise: str, genre: str, tone: str, target_count: int) -> List[Dict]:
+        current_count = len(existing_chapters)
+        needed = target_count - current_count
+        if needed <= 0:
+            return []
+            
+        last_chapter = existing_chapters[-1]
+        
+        prompt = f"""小说：{premise}
+类型：{genre}
+风格：{tone}
+
+【当前进度】
+已生成前 {current_count} 章。
+最后一章是：{last_chapter['title']} - {last_chapter['summary']}
+
+【任务】
+请继续生成剩下的 {needed} 章，直到完结或达到目标章节数。
+请紧接上一章的剧情。
+
+请按以下格式输出（不要有任何思考内容）：
+
+【章节概要】
+1. 章节标题|章节概要
+2. 章节标题|章节概要
+...
+"""
+        response = await self.llm.generate(prompt)
+        
+        # 清理
+        response = re.sub(r'<think>.*?</think>', '', response, flags=re.DOTALL)
+        response = re.sub(r'\*\*', '', response)
+        
+        # 提取章节部分
+        if '【章节概要】' in response:
+            parts = response.split('【章节概要】')
+            if len(parts) > 1:
+                chapter_text = parts[1].split('【')[0] # 取直到下一个 header 或结束
+                return self._parse_chapters(chapter_text, existing_chapters[0]["novel_id"])
+        
+        # 如果没有 header，尝试直接解析
+        return self._parse_chapters(response, existing_chapters[0]["novel_id"])
+
 
     async def generate_outline_stream(self, novel_id: str) -> AsyncGenerator[str, None]:
         from sqlalchemy import select
@@ -275,11 +342,13 @@ class OutlineGenerator:
 请按以下格式输出（不要有任何思考内容）：
 
 【章节概要】
-章节标题|章节概要
+1. 章节标题|章节概要
+2. 章节标题|章节概要
+...
 （共{num_chapters}个）
 
 【角色】
-角色名|角色设定|性格
+角色名|角色设定及人际关系|性格|初始境界或状态(如：练气一层)
 
 【世界观】
 条目名|内容
@@ -304,7 +373,9 @@ class OutlineGenerator:
                 lore = self._parse_lore(section, novel_id)
 
         if not chapters:
-            raise ValueError("无法解析大纲生成结果")
+            # Fallback parsing if section headers are missing or different
+             print("Warning: Standard parsing failed, trying fallback...")
+             chapters = self._parse_chapters(response, novel_id)
 
         return {"chapters": chapters, "characters": characters, "lore": lore}
 
@@ -320,6 +391,7 @@ class OutlineGenerator:
             if any(x in line for x in ['章节概要', '共', '(如:', '请按', '请输出', '【', '】']):
                 continue
 
+            # Remove leading numbers (1. 2. etc)
             line = re.sub(r'^\d+[.、\s]+', '', line)
             line = line.strip()
             if not line or len(line) < 5:
@@ -332,13 +404,29 @@ class OutlineGenerator:
                     if any(x in title for x in ['章节', '标题', '示例']):
                         continue
                     summary = parts[1].strip() if len(parts) > 1 else ""
-                    if title and summary and len(summary) > 10:
+                    if title and summary and len(summary) > 5:
                         chapters.append({
                             "novel_id": novel_id,
                             "order_index": len(chapters) + 1,
                             "title": title,
                             "summary": summary
                         })
+            # Handle case where AI uses "Title: Summary" or "Title - Summary"
+            elif ':' in line:
+                 parts = [p.strip() for p in line.split(':', 1)]
+                 if len(parts) >= 2 and len(parts[1]) > 5:
+                     title = parts[0].strip()
+                     if len(title) < 20: # Reasonable title length
+                         chapters.append({
+                            "novel_id": novel_id,
+                            "order_index": len(chapters) + 1,
+                            "title": title,
+                            "summary": parts[1].strip()
+                        })
+            elif ' ' in line:
+                 # Last resort: Try to split by first space if it looks like "Title Summary"
+                 # But this is risky, maybe just skip or take whole line as title
+                 pass
 
         return chapters
 
@@ -364,6 +452,17 @@ class OutlineGenerator:
                 name = parts[0].strip()
                 bio = parts[1].strip() if len(parts) > 1 else ""
                 personality = parts[2].strip() if len(parts) > 2 else ""
+                
+                power_state = None
+                if len(parts) > 3:
+                    initial_state_str = parts[3].strip()
+                    if initial_state_str and initial_state_str.lower() != "none":
+                        # Construct a basic power state
+                        power_state = {
+                            "realm": initial_state_str,
+                            "inventory": [],
+                            "core_skills": []
+                        }
 
                 if name and len(name) > 0:
                     characters.append({
@@ -371,7 +470,8 @@ class OutlineGenerator:
                         "name": name,
                         "bio": bio,
                         "personality": personality,
-                        "role": "角色"
+                        "role": "角色",
+                        "power_state": power_state
                     })
 
         return characters
@@ -522,9 +622,12 @@ class SceneGenerator:
         context["prev_summaries"] = summaries
         print(f"DEBUG: Final context summaries: {summaries}")
 
-
+        # 获取角色上下文
         if scene.characters_present:
-            for char_id in scene.characters_present:
+            char_ids = scene.characters_present
+            
+            # 1. 获取角色基本信息
+            for char_id in char_ids:
                 result = await db.execute(select(Character).where(Character.id == char_id))
                 character = result.scalar_one_or_none()
                 if character:
@@ -534,10 +637,41 @@ class SceneGenerator:
                         top_k=1
                     )
                     context["character_contexts"].append({
+                        "id": character.id,
                         "name": character.name,
                         "bio": character.bio,
-                        "personality": character.personality
+                        "personality": character.personality,
+                        "power_state": character.power_state
                     })
+            
+            # 2. 获取角色关系上下文 (如果有2个及以上角色)
+            context["relationships"] = []
+            if len(char_ids) >= 2:
+                # 查询所有涉及这些角色的关系
+                # 只要 A 和 B 都在 char_ids 列表中
+                stmt = select(Relationship).where(
+                    and_(
+                        Relationship.character_a_id.in_(char_ids),
+                        Relationship.character_b_id.in_(char_ids)
+                    )
+                )
+                rels_result = await db.execute(stmt)
+                relationships = rels_result.scalars().all()
+                
+                # 为了 Prompt 易读，我们需要把 ID 转换成名字
+                # 先建立 id -> name 映射
+                id_to_name = {c["id"]: c["name"] for c in context["character_contexts"]}
+                
+                for rel in relationships:
+                    name_a = id_to_name.get(rel.character_a_id)
+                    name_b = id_to_name.get(rel.character_b_id)
+                    if name_a and name_b:
+                        context["relationships"].append({
+                            "char_a": name_a,
+                            "char_b": name_b,
+                            "affinity": rel.affinity_score,
+                            "conflict": rel.core_conflict
+                        })
 
         if scene.beat_description:
             lore_contexts = rag_service.retrieve_context(
@@ -565,10 +699,31 @@ class SceneGenerator:
         character_info = ""
         for char in context["character_contexts"]:
             character_info += f"\n角色: {char['name']} - {char.get('personality', '')}"
+            if char.get('power_state'):
+                character_info += f"\n  - 状态: {json.dumps(char['power_state'], ensure_ascii=False)}"
+
+        if context.get("relationships"):
+            character_info += "\n\n【角色关系与潜台词】"
+            for rel in context["relationships"]:
+                affinity_desc = "普通"
+                if rel['affinity'] > 60: affinity_desc = "亲密/信任"
+                elif rel['affinity'] > 20: affinity_desc = "友善"
+                elif rel['affinity'] < -60: affinity_desc = "仇恨/死敌"
+                elif rel['affinity'] < -20: affinity_desc = "敌对/厌恶"
+                
+                character_info += f"\n- {rel['char_a']} <-> {rel['char_b']}: 好感度 {rel['affinity']} ({affinity_desc})"
+                if rel['conflict']:
+                    character_info += f"\n  核心矛盾/心结: {rel['conflict']}"
 
         lore_info = ""
         for lore in context["lore_contexts"]:
             lore_info += f"- {lore['text']}\n"
+
+        tension_guide = ""
+        if scene.tension_level:
+            tension_guide += f"当前场景张力等级：{scene.tension_level}/10\n"
+        if scene.emotional_target:
+            tension_guide += f"情绪传达目标：【{scene.emotional_target}】\n请调整你的句式长短和描写重心来匹配这一张力。\n"
 
         return f"""请根据以下信息写小说正文。注意：不要输出任何思考内容，只需要输出小说正文。
 
@@ -578,6 +733,7 @@ class SceneGenerator:
 场景：{scene.location}
 动作指令：{scene.beat_description}
 
+{tension_guide}
 要求：800-1200字，通过动作描写表现心理，禁止流水账。
 """
 

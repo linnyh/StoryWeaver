@@ -17,6 +17,8 @@ class Scene(Base):
     content = Column(Text, nullable=True)  # AI 生成的最终正文
     summary = Column(Text, nullable=True)  # 场景摘要（用于后续上下文）
     status = Column(String(20), nullable=False, default="draft")  # draft/approved
+    tension_level = Column(Integer, nullable=True)  # 情绪张力 (1-10)
+    emotional_target = Column(String(255), nullable=True)  # 情绪传达目标
 
     def __repr__(self):
         return f"<Scene {self.id} - {self.location}>"

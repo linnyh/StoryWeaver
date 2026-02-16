@@ -186,6 +186,7 @@
               <el-option label="言情 (Romance)" value="言情" />
               <el-option label="悬疑 (Mystery)" value="悬疑" />
               <el-option label="都市 (Urban)" value="都市" />
+              <el-option label="穿越 (Time Travel)" value="穿越" />
             </el-select>
           </el-form-item>
           <el-form-item label="Tone">

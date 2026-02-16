@@ -151,9 +151,14 @@
     <div class="col-span-3 flex flex-col glass-panel rounded-2xl overflow-hidden h-[calc(100vh-140px)]">
       <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50">
         <span class="font-display text-white font-medium tracking-wide">Database</span>
-        <button @click="goToRag" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="RAG Knowledge">
-          <el-icon><Files /></el-icon>
-        </button>
+        <div class="flex gap-2">
+            <button @click="showGraphDialog = true" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-purple transition-colors" title="Relationship Map">
+              <el-icon><Share /></el-icon>
+            </button>
+            <button @click="goToRag" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="RAG Knowledge">
+              <el-icon><Files /></el-icon>
+            </button>
+        </div>
       </div>
 
       <div class="flex-1 flex flex-col overflow-hidden">
@@ -175,11 +180,49 @@
             <div v-if="characters.length === 0" class="text-center py-8 text-gray-500 text-sm">No characters found</div>
             <div v-else class="space-y-3">
               <div v-for="char in characters" :key="char.id" class="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
-                <div class="flex justify-between items-start">
+                <div class="flex justify-between items-start mb-2">
                   <div class="font-medium text-white">{{ char.name }}</div>
                   <div class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400">{{ char.role || 'NPC' }}</div>
                 </div>
-                <!-- Add more char details if available -->
+                
+                <div v-if="char.bio" class="text-xs text-gray-300 mb-1">
+                  <span class="text-gray-500">Setting:</span> {{ char.bio }}
+                </div>
+                
+                <div v-if="char.personality" class="text-xs text-gray-300 mb-1">
+                  <span class="text-gray-500">Personality:</span> {{ char.personality }}
+                </div>
+                
+                <div v-if="char.appearance" class="text-xs text-gray-300">
+                  <span class="text-gray-500">Appearance:</span> {{ char.appearance }}
+                </div>
+
+                <div v-if="char.power_state" class="mt-2 pt-2 border-t border-white/5">
+                  <div class="text-[10px] text-neon-blue uppercase tracking-wider mb-1 font-bold">Current State</div>
+                  <div class="grid grid-cols-1 gap-1 text-xs text-gray-300">
+                    <div v-if="char.power_state.realm">
+                      <span class="text-gray-500">Realm:</span> {{ char.power_state.realm }}
+                    </div>
+                    <div v-if="char.power_state.bottleneck">
+                      <span class="text-gray-500">Bottleneck:</span> {{ char.power_state.bottleneck }}
+                    </div>
+                    <div v-if="char.power_state.core_skills && char.power_state.core_skills.length > 0">
+                      <span class="text-gray-500">Skills:</span> {{ char.power_state.core_skills.join(', ') }}
+                    </div>
+                    <div v-if="char.power_state.inventory && char.power_state.inventory.length > 0">
+                      <span class="text-gray-500">Inventory:</span>
+                      <ul class="list-disc list-inside pl-1 mt-0.5 text-[10px] text-gray-400">
+                        <li v-for="(item, idx) in char.power_state.inventory" :key="idx">
+                          {{ item.item }} <span v-if="item.uses_left !== undefined">(x{{ item.uses_left }})</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                <!-- Debug Info -->
+                <div v-else class="mt-2 pt-2 border-t border-white/5 text-[10px] text-gray-600">
+                   No Power State
+                </div>
               </div>
             </div>
           </template>
@@ -221,6 +264,42 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- Relationship Graph Dialog -->
+    <el-dialog v-model="showGraphDialog" title="Relationship Map" width="80%" top="5vh" class="glass-dialog-override" destroy-on-close>
+      <div class="flex gap-4 h-[70vh]">
+        <div class="flex-1 bg-black/20 rounded-xl overflow-hidden border border-white/5 relative">
+             <RelationshipGraph 
+                :characters="characters" 
+                :relationships="relationships" 
+                class="w-full h-full"
+              />
+              <div class="absolute bottom-4 right-4 p-3 bg-space-900/80 backdrop-blur-md rounded-lg border border-white/10 text-xs text-gray-300">
+                  <div class="font-bold mb-2 text-white">Legend</div>
+                  <div class="flex items-center gap-2 mb-1"><span class="w-3 h-3 rounded-full bg-[#00ff9d]"></span> Intimate (>60)</div>
+                  <div class="flex items-center gap-2 mb-1"><span class="w-3 h-3 rounded-full bg-[#00f0ff]"></span> Friendly (>20)</div>
+                  <div class="flex items-center gap-2 mb-1"><span class="w-3 h-3 rounded-full bg-[#f5d300]"></span> Hostile (<-20)</div>
+                  <div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full bg-[#ff2a6d]"></span> Nemesis (<-60)</div>
+              </div>
+        </div>
+        <div class="w-80 flex flex-col glass-panel rounded-xl overflow-hidden">
+            <div class="p-3 border-b border-white/5 font-bold text-white bg-white/5">Relationship Details</div>
+            <div class="flex-1 overflow-y-auto p-3 custom-scrollbar space-y-2">
+                 <div v-for="rel in relationships" :key="rel.id" class="p-3 bg-white/5 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
+                      <div class="flex justify-between items-center mb-1">
+                         <span class="text-neon-blue font-bold text-sm">{{ rel.character_a?.name || 'Unknown' }} <-> {{ rel.character_b?.name || 'Unknown' }}</span>
+                         <span :class="rel.affinity_score > 0 ? 'text-[#00ff9d]' : 'text-[#ff2a6d]'" class="font-mono font-bold">{{ rel.affinity_score }}</span>
+                      </div>
+                      <div class="text-xs text-gray-400 mt-2 leading-relaxed" v-if="rel.core_conflict">{{ rel.core_conflict }}</div>
+                      <div class="text-xs text-gray-600 italic mt-1" v-else>No specific conflict recorded</div>
+                   </div>
+                   <div v-if="relationships.length === 0" class="text-center text-gray-500 py-10 text-sm">
+                      No relationships recorded yet.
+                   </div>
+            </div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -229,7 +308,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNovelStore } from '@/stores/novel'
 import { ElMessage } from 'element-plus'
-import { Download, Location, Files, Operation, Document, MagicStick, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Share, Download, Location, Files, Operation, Document, MagicStick, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import RelationshipGraph from '@/components/RelationshipGraph.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -241,6 +321,7 @@ const characters = computed(() => store.characters)
 const lores = computed(() => store.lores)
 const scenes = computed(() => store.scenes)
 const currentChapter = computed(() => store.currentChapter)
+const relationships = computed(() => store.relationships)
 
 const activeTab = ref('characters')
 const generatingOutline = ref(false)
@@ -248,6 +329,7 @@ const generatingBeats = ref(false)
 const summarizing = ref(false)
 const exporting = ref(false)
 const showOutlineDialog = ref(false)
+const showGraphDialog = ref(false)
 
 const outlineForm = ref({
   premise: '',
@@ -273,7 +355,8 @@ async function loadData() {
     await Promise.all([
       store.loadChapters(novelId).catch(e => console.error('Failed to load chapters', e)),
       store.loadCharacters(novelId).catch(e => console.error('Failed to load characters', e)),
-      store.loadLores(novelId).catch(e => console.error('Failed to load lores', e))
+      store.loadLores(novelId).catch(e => console.error('Failed to load lores', e)),
+      store.loadRelationships(novelId).catch(e => console.error('Failed to load relationships', e))
     ])
 
     if (store.currentNovel?.premise) {
@@ -288,8 +371,12 @@ async function loadData() {
        await Promise.all([
          store.loadChapters(novelId).catch(e => console.error('Failed to load chapters', e)),
          store.loadCharacters(novelId).catch(e => console.error('Failed to load characters', e)),
-         store.loadLores(novelId).catch(e => console.error('Failed to load lores', e))
+         store.loadLores(novelId).catch(e => console.error('Failed to load lores', e)),
+         store.loadRelationships(novelId).catch(e => console.error('Failed to load relationships', e))
        ])
+    } else {
+        // Always refresh relationships to show latest state
+        store.loadRelationships(novelId).catch(e => console.error('Failed to load relationships', e))
     }
 
     // If a chapter is currently selected, refresh its scenes

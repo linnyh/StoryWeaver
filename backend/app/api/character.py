@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from app.database import get_db
 from app.models import Character
+from app.services import state_analyzer
 
 router = APIRouter()
 
@@ -17,6 +18,7 @@ class CharacterCreate(BaseModel):
     personality: Optional[str] = None
     appearance: Optional[str] = None
     role: Optional[str] = None
+    power_state: Optional[Dict[str, Any]] = None
 
 
 class CharacterUpdate(BaseModel):
@@ -25,6 +27,7 @@ class CharacterUpdate(BaseModel):
     personality: Optional[str] = None
     appearance: Optional[str] = None
     role: Optional[str] = None
+    power_state: Optional[Dict[str, Any]] = None
 
 
 class CharacterResponse(BaseModel):
@@ -35,9 +38,43 @@ class CharacterResponse(BaseModel):
     personality: Optional[str]
     appearance: Optional[str]
     role: Optional[str]
+    power_state: Optional[Dict[str, Any]]
 
     class Config:
         from_attributes = True
+
+
+class StateUpdateRequest(BaseModel):
+    text: str
+
+
+@router.post("/{character_id}/state_update", response_model=CharacterResponse)
+async def update_character_state(
+    character_id: str,
+    request: StateUpdateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """根据文本内容自动更新角色状态"""
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    character = result.scalar_one_or_none()
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+
+    # 调用 LLM 分析状态
+    new_state = await state_analyzer.analyze_state(character, request.text)
+    
+    # 更新数据库
+    # 注意：这里我们做的是增量更新还是全量覆盖？
+    # 假设 LLM 返回的是完整的 state，或者我们需要合并。
+    # 简单起见，假设 LLM 返回完整的 updated state。
+    
+    if new_state:
+        character.power_state = new_state
+        await db.commit()
+        await db.refresh(character)
+        
+    return character
+
 
 
 @router.post("/", response_model=CharacterResponse)
