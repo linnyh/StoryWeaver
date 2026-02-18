@@ -19,6 +19,8 @@ class Scene(Base):
     status = Column(String(20), nullable=False, default="draft")  # draft/approved
     tension_level = Column(Integer, nullable=True)  # 情绪张力 (1-10)
     emotional_target = Column(String(255), nullable=True)  # 情绪传达目标
+    image_url = Column(String(500), nullable=True)  # 场景分镜配图
+    image_prompts = Column(JSON, nullable=True)  # 场景分镜配图及Prompt列表 [{'url': '', 'prompt': ''}, ...]
 
     def __repr__(self):
         return f"<Scene {self.id} - {self.location}>"

@@ -38,6 +38,7 @@ export const sceneApi = {
   update: (id, data) => api.put(`/scenes/${id}`, data),
   delete: (id) => api.delete(`/scenes/${id}`),
   generate: (id) => new EventSource(`/api/scenes/${id}/generate`),
+  generateImage: (id) => api.post(`/scenes/${id}/generate_image`),
   summarize: (id) => api.post(`/scenes/${id}/summarize`),
   chat: (id, message) => api.post(`/scenes/${id}/chat`, { message }, { responseType: 'stream' }) // Use stream or handle SSE manually if needed, but for simple POST usually we use fetch for SSE
 }
