@@ -126,16 +126,89 @@
     </div>
 
     <!-- Right: Assistant -->
-    <div class="col-span-3 flex flex-col glass-panel rounded-2xl overflow-hidden">
-      <div class="p-4 border-b border-white/5 bg-space-900/50 backdrop-blur-xl">
-        <h3 class="font-display text-white font-medium tracking-wide flex items-center gap-2">
-          <el-icon class="text-neon-pink"><ChatDotRound /></el-icon>
-          AI Assistant
-        </h3>
+    <div class="col-span-3 flex flex-col gap-4 h-full">
+      <!-- Top: Storyboard Image -->
+      <div class="h-1/3 min-h-[200px] flex flex-col glass-panel rounded-2xl overflow-hidden relative group">
+        <!-- Carousel for multiple images -->
+        <div v-if="currentScene?.image_prompts && currentScene.image_prompts.length > 0" class="absolute inset-0">
+             <el-carousel 
+                :interval="5000" 
+                arrow="hover" 
+                height="100%" 
+                indicator-position="none" 
+                @change="handleCarouselChange"
+                :autoplay="false"
+             >
+                <el-carousel-item v-for="(item, index) in currentScene.image_prompts" :key="index" class="h-full">
+                    <div class="w-full h-full bg-gray-800 flex items-center justify-center">
+                        <img 
+                            :src="item.url" 
+                            class="w-full h-full object-cover cursor-pointer" 
+                            alt="Storyboard" 
+                            referrerpolicy="no-referrer"
+                            @click="openImagePreview(item)"
+                            @error="handleImageError"
+                        />
+                    </div>
+                </el-carousel-item>
+             </el-carousel>
+             
+             <!-- Overlay Controls -->
+             <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                 <div class="pointer-events-auto flex gap-2">
+                    <button 
+                      @click="handleGenerateImage"
+                      :disabled="generatingImage"
+                      class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-colors flex items-center gap-2"
+                    >
+                      <el-icon :class="{ 'animate-spin': generatingImage }"><Refresh /></el-icon>
+                      Regenerate
+                    </button>
+                 </div>
+             </div>
+             
+             <!-- Prompt Overlay (Bottom) -->
+             <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent pointer-events-none">
+                 <p class="text-[10px] text-gray-300 line-clamp-2 leading-tight opacity-80">
+                     {{ currentImagePrompt }}
+                 </p>
+             </div>
+        </div>
+        
+        <!-- Empty State -->
+        <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-500 gap-3 p-6 text-center">
+            <el-icon class="text-4xl opacity-20"><Picture /></el-icon>
+            <p class="text-xs">No storyboard yet</p>
+            <button 
+              @click="handleGenerateImage"
+              :disabled="generatingImage"
+              class="px-4 py-2 rounded-xl bg-neon-purple/10 hover:bg-neon-purple/20 border border-neon-purple/20 text-neon-purple text-xs font-medium transition-colors flex items-center gap-2"
+            >
+              <el-icon :class="{ 'animate-spin': generatingImage }"><MagicStick /></el-icon>
+              Generate Storyboard
+            </button>
+        </div>
+        
+        <!-- Header Overlay -->
+        <div class="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10">
+             <h3 class="font-display text-white text-xs font-medium tracking-wide flex items-center gap-2 opacity-80">
+              <el-icon class="text-neon-green"><Picture /></el-icon>
+              Storyboard
+            </h3>
+        </div>
       </div>
 
-      <div class="flex-1 flex flex-col overflow-hidden relative">
-        <div class="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4" ref="chatContainer">
+      <!-- Bottom: Assistant -->
+      <div class="flex-1 flex flex-col glass-panel rounded-2xl overflow-hidden">
+        <div class="p-4 border-b border-white/5 bg-space-900/50 backdrop-blur-xl">
+          <h3 class="font-display text-white font-medium tracking-wide flex items-center gap-2">
+            <el-icon class="text-neon-pink"><ChatDotRound /></el-icon>
+            AI Assistant
+          </h3>
+        </div>
+
+        <div class="flex-1 flex flex-col overflow-hidden relative">
+          <div class="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4" ref="chatContainer">
           <div v-if="chatMessages.length === 0" class="text-center py-8 text-gray-500 text-xs">
             Ask me to refine text, suggest ideas, or check consistency.
           </div>
@@ -182,6 +255,7 @@
         </div>
       </div>
     </div>
+    </div>
     <!-- Editorial Logs Dialog -->
     <el-dialog
       v-model="showLogs"
@@ -212,6 +286,51 @@
         </div>
       </div>
     </el-dialog>
+    
+    <!-- Image Preview Dialog -->
+    <el-dialog
+      v-model="showImagePreview"
+      width="900px"
+      :modal-class="'glass-dialog'"
+      align-center
+    >
+      <div class="h-[70vh] flex flex-col gap-4 p-2 relative" v-if="currentScene?.image_prompts && currentScene.image_prompts.length > 0">
+          <el-carousel 
+            ref="previewCarousel"
+            :autoplay="false" 
+            indicator-position="none" 
+            arrow="always"
+            class="flex-1 w-full h-full"
+            :initial-index="currentImageIndex"
+            @change="handleCarouselChange"
+          >
+              <el-carousel-item v-for="(item, index) in currentScene.image_prompts" :key="index" class="h-full">
+                  <div class="w-full h-full flex flex-col">
+                      <!-- Image Area -->
+                      <div class="flex-1 bg-black/50 border border-white/10 rounded-xl overflow-hidden flex items-center justify-center relative">
+                          <img 
+                            :src="item.url" 
+                            class="max-w-full max-h-full object-contain" 
+                            alt="Preview" 
+                            referrerpolicy="no-referrer"
+                            @error="handleImageError"
+                          />
+                      </div>
+                      
+                      <!-- Prompt Area -->
+                      <div class="mt-4 p-4 rounded-xl bg-white/5 border border-white/5 flex-shrink-0">
+                          <h4 class="text-xs uppercase tracking-wider text-gray-500 font-bold mb-2 flex items-center gap-2">
+                              <el-icon><MagicStick /></el-icon> Prompt
+                          </h4>
+                          <p class="text-sm text-gray-300 leading-relaxed font-mono bg-black/20 p-3 rounded-lg border border-white/5">
+                              {{ item.prompt }}
+                          </p>
+                      </div>
+                  </div>
+              </el-carousel-item>
+          </el-carousel>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -233,6 +352,18 @@
 .glass-dialog .el-dialog__body {
   padding: 20px;
 }
+
+/* Carousel fix */
+.el-carousel, .el-carousel__container {
+    height: 100% !important;
+}
+.el-carousel__item {
+    height: 100%;
+    display: block !important;
+}
+.el-dialog__body {
+    height: 100%;
+}
 </style>
 
 <script setup>
@@ -240,9 +371,8 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { sceneApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { Location, MagicStick, ArrowLeft, Document, ChatDotRound, Position, Loading, DataAnalysis } from '@element-plus/icons-vue'
+import { Location, MagicStick, ArrowLeft, Document, ChatDotRound, Position, Loading, DataAnalysis, Picture, Refresh } from '@element-plus/icons-vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
-
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
 const route = useRoute()
@@ -252,11 +382,20 @@ const currentScene = ref(null)
 const content = ref('')
 const prevSummary = ref('')
 const generating = ref(false)
+const generatingImage = ref(false)
 const saving = ref(false)
 const systemStatus = ref('')
 const showLogs = ref(false)
+const showImagePreview = ref(false)
+const previewImage = ref(null)
+const currentImageIndex = ref(0)
 const editorialLogs = ref([])
 const enableEditorial = ref(true) // 默认开启审稿
+
+const currentImagePrompt = computed(() => {
+  if (!currentScene.value?.image_prompts?.length) return ''
+  return currentScene.value.image_prompts[currentImageIndex.value]?.prompt || ''
+})
 
 const chatMessages = ref([])
 const chatInput = ref('')
@@ -266,6 +405,57 @@ function goBack() {
   router.back()
 }
 
+function handleImageError(e) {
+  console.error('Image load error:', e)
+  // ElMessage.warning('Failed to load image')
+  // Use a fallback image
+  e.target.src = 'https://placehold.co/600x400/1a1a1a/FFF?text=Image+Load+Error'
+}
+
+function handleCarouselChange(index) {
+  currentImageIndex.value = index
+}
+
+const previewCarousel = ref(null)
+
+function openImagePreview(item) {
+  previewImage.value = item
+  // Find the index of the clicked item
+  if (currentScene.value?.image_prompts) {
+      const index = currentScene.value.image_prompts.findIndex(p => p.url === item.url)
+      if (index !== -1) {
+          currentImageIndex.value = index
+      }
+  }
+  showImagePreview.value = true
+  // Reset carousel to correct index after dialog opens
+  nextTick(() => {
+      if (previewCarousel.value) {
+          previewCarousel.value.setActiveItem(currentImageIndex.value)
+      }
+  })
+}
+
+async function handleGenerateImage() {
+  if (!currentScene.value) return
+  
+  generatingImage.value = true
+  try {
+    const { data } = await sceneApi.generateImage(currentScene.value.id)
+    // data.images is expected to be a list of {url, prompt}
+    if (data.images && data.images.length > 0) {
+        currentScene.value.image_prompts = data.images
+        currentScene.value.image_url = data.images[0].url
+    }
+    currentImageIndex.value = 0
+    ElMessage.success('Storyboard generated')
+  } catch (error) {
+    ElMessage.error('Failed to generate storyboard')
+  } finally {
+    generatingImage.value = false
+  }
+}
+
 async function loadScene() {
   const sceneId = route.params.sceneId
   try {
@@ -273,6 +463,11 @@ async function loadScene() {
     currentScene.value = data
     content.value = data.content || ''
     prevSummary.value = data.context_summary || 'No context summary available'
+    
+    // Legacy support for image_url -> image_prompts
+    if (data.image_url && (!data.image_prompts || data.image_prompts.length === 0)) {
+        currentScene.value.image_prompts = [{ url: data.image_url, prompt: 'Generated image' }]
+    }
   } catch (error) {
     ElMessage.error('Failed to load scene')
   }

@@ -1,6 +1,7 @@
 import json
 import re
 import asyncio
+import aiohttp
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
@@ -14,6 +15,7 @@ from app.models import Scene, Chapter, Character, Novel, Relationship
 from app.services import scene_generator, summarizer, state_analyzer, relationship_analyzer
 from app.rag import rag_service
 from app.api.scene_chat import router as chat_router
+from app.config import settings
 
 class SceneUpdateRequest(BaseModel):
     content: Optional[str] = None
@@ -22,6 +24,8 @@ class SceneUpdateRequest(BaseModel):
     tension_level: Optional[int] = None
     emotional_target: Optional[str] = None
     characters_present: Optional[list[str]] = None
+    image_url: Optional[str] = None
+    image_prompts: Optional[list[dict]] = None
 
 class SceneDetailResponse(BaseModel):
     id: str
@@ -36,6 +40,8 @@ class SceneDetailResponse(BaseModel):
     context_summary: Optional[str] = None 
     tension_level: Optional[int] = None
     emotional_target: Optional[str] = None
+    image_url: Optional[str] = None
+    image_prompts: Optional[list[dict]] = None
 
     class Config:
         from_attributes = True
@@ -282,6 +288,155 @@ async def generate_scene_content(
             "Connection": "keep-alive",
         }
     )
+
+
+@router.post("/{scene_id}/generate_image")
+async def generate_scene_image(
+    scene_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    生成场景分镜配图 (MiniMax) - 多张
+    1. 调用 LLM 生成 3-4 个分镜 Prompt
+    2. 并行调用 MiniMax 文生图
+    3. 存储结果
+    """
+    if not settings.minimax_api_key:
+        raise HTTPException(status_code=500, detail="MiniMax API Key not configured")
+
+    result = await db.execute(select(Scene).where(Scene.id == scene_id))
+    scene = result.scalar_one_or_none()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+        
+    # --- Step 1: Generate Prompts using LLM (OpenAI Compatible) ---
+    from app.services.generator import OpenAICompatClient
+    
+    # Manually initialize OpenAICompatClient since we need it here
+    client = OpenAICompatClient(
+        api_key=settings.openai_api_key or settings.minimax_api_key,
+        base_url=settings.openai_base_url or settings.minimax_base_url,
+        model=settings.openai_model or "abab6.5s-chat"
+    )
+    
+    scene_text = f"Location: {scene.location or 'Unknown'}\nContent: {scene.content or scene.beat_description or ''}"
+    
+    system_prompt = """You are a professional storyboard artist and director. 
+    Based on the provided scene content, generate 3 to 4 distinct visual prompts for storyboard images. 
+    Each prompt should focus on a key moment or visual detail of the scene.
+    
+    CRITICAL: The prompts MUST be in Simplified Chinese (简体中文). Do NOT output English.
+    
+    Output format: JSON array of strings. 
+    Example: ["一个昏暗小巷的全景镜头，地面潮湿反射着霓虹灯光...", "角色手部的特写，紧紧握着一把生锈的钥匙...", "过肩镜头，展示主角面对巨大的神秘黑影..."]
+    Do not output anything else but the JSON array.
+    """
+    
+    full_prompt_text = f"{system_prompt}\n\nUser Input:\n{scene_text}"
+    
+    try:
+        print(f"Generating prompts with model: {client.model}")
+        prompt_response = await client.generate(full_prompt_text)
+        print(f"LLM Response for prompts: {prompt_response}")
+             
+        # Extract JSON list
+        # Simple cleanup
+        prompt_response = prompt_response.strip()
+        # Clean thinking blocks
+        prompt_response = re.sub(r'<think>.*?</think>', '', prompt_response, flags=re.DOTALL).strip()
+        
+        # Remove markdown code blocks if present
+        if "```json" in prompt_response:
+            prompt_response = prompt_response.split("```json")[1].split("```")[0].strip()
+        elif "```" in prompt_response:
+            prompt_response = prompt_response.split("```")[1].split("```")[0].strip()
+            
+        prompts = json.loads(prompt_response)
+        if not isinstance(prompts, list):
+             print(f"Warning: LLM response is not a list: {prompts}")
+             prompts = [prompt_response] # Fallback
+             
+    except Exception as e:
+        print(f"Failed to generate prompts: {e}")
+        # Fallback prompts if LLM fails
+        base_prompt = f"{scene.location or ''}. {scene.beat_description or ''}"
+        prompts = [base_prompt]
+
+    # --- Step 2: Generate Images in Parallel ---
+    
+    url = "https://api.minimaxi.com/v1/image_generation"
+    headers = {
+        "Authorization": f"Bearer {settings.minimax_api_key}",
+        "Content-Type": "application/json"
+    }
+    
+    generated_images = []
+    
+    # Limit parallel tasks to avoid rate limits if necessary
+    semaphore = asyncio.Semaphore(5)
+
+    async def generate_single_image(prompt_text):
+        async with semaphore:
+            style_prompt = "Cinematic lighting, detailed, photorealistic, 8k resolution, movie still."
+            full_prompt = f"{prompt_text} {style_prompt}".strip()
+            
+            payload = {
+                "model": "image-01",
+                "prompt": full_prompt,
+                "aspect_ratio": "16:9",
+                "response_format": "url",
+                "n": 1,
+                "prompt_optimizer": True
+            }
+            
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, headers=headers, json=payload) as resp:
+                        if resp.status != 200:
+                            print(f"MiniMax Error for prompt '{prompt_text[:20]}...': {await resp.text()}")
+                            return None
+                        
+                        data = await resp.json()
+                        image_url = None
+                        
+                        # Extract URL logic
+                        if "data" in data and isinstance(data["data"], list) and len(data["data"]) > 0:
+                            image_url = data["data"][0].get("url")
+                        elif "data" in data and isinstance(data["data"], dict) and "image_urls" in data["data"]:
+                            urls = data["data"]["image_urls"]
+                            if urls and len(urls) > 0:
+                                image_url = urls[0]
+                        elif "images" in data and len(data["images"]) > 0:
+                            image_url = data["images"][0].get("url")
+                        elif "output" in data and "url" in data["output"]:
+                            image_url = data["output"]["url"]
+                        
+                        if image_url:
+                            return {"url": image_url, "prompt": prompt_text}
+                        return None
+            except Exception as e:
+                print(f"Error generating image for prompt '{prompt_text[:20]}...': {e}")
+                return None
+
+    # Run tasks
+    tasks = [generate_single_image(p) for p in prompts]
+    results = await asyncio.gather(*tasks)
+    
+    # Filter valid results
+    generated_images = [r for r in results if r is not None]
+    
+    if not generated_images:
+        raise HTTPException(status_code=500, detail="Failed to generate any images")
+
+    # --- Step 3: Save to DB ---
+    scene.image_prompts = generated_images
+    # Update image_url to the first one for backward compatibility if needed, or just leave it
+    if generated_images:
+        scene.image_url = generated_images[0]["url"]
+        
+    await db.commit()
+    
+    return {"scene_id": scene_id, "images": generated_images}
 
 
 @router.post("/{scene_id}/summarize")
