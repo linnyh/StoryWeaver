@@ -1,5 +1,6 @@
 """应用入口"""
 import os
+from uuid import uuid4
 
 # Workaround for PermissionError when SSLKEYLOGFILE is set but not writable
 # This must be done before any network/SSL libraries are imported
@@ -7,16 +8,44 @@ if "SSLKEYLOGFILE" in os.environ:
     del os.environ["SSLKEYLOGFILE"]
 
 from fastapi import FastAPI
+from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from app.api import novel, character, chapter, scene, lore, settings, relationship
+from app.errors import (
+    http_exception_handler,
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
+from app.logging import reset_request_id, set_request_id, setup_logging
 from app.models import Lore, SystemConfig  # 导入模型以创建数据库表
 from app.database import init_db
+
+setup_logging()
 
 app = FastAPI(
     title="StoryWeaver API",
     description="AI 长篇小说生成系统",
     version="0.1.0"
 )
+
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid4())
+    token = set_request_id(request_id)
+    request.state.request_id = request_id
+    try:
+        response = await call_next(request)
+    finally:
+        reset_request_id(token)
+
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 # CORS 配置
 app.add_middleware(
