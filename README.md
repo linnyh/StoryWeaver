@@ -153,6 +153,37 @@ npm run dev
 uvicorn app.main:app --reload
 ```
 
+## ✅ 测试与 CI
+
+后端测试说明见：`backend/TESTING.md`
+
+在 `backend/` 目录执行：
+
+```bash
+python -m unittest -q \
+  test_scene_image_service.py \
+  test_errors_unittest.py \
+  test_scene_usecases_unittest.py \
+  test_scene_postprocess_unittest.py \
+  test_chapter_usecases_unittest.py \
+  test_novel_usecases_unittest.py \
+  test_api_integration_unittest.py
+```
+
+CI 工作流：
+
+- `.github/workflows/backend-ci.yml`
+- 在 `push/pull_request` 且后端相关文件变化时自动运行上述测试。
+
+## 🧱 后端架构现状（重构后）
+
+后端已采用“薄路由 + usecase/service”分层：
+
+- `app/api/`：参数校验、响应组装、调用 usecase。
+- `app/services/*_usecases.py`：业务编排与事务边界。
+- `app/services/scene_postprocess.py`：场景摘要/RAG/状态关系分析后处理。
+- `app/errors.py` + `app/logging.py`：全局异常结构与请求 ID 日志追踪。
+
 ## 📂 项目结构
 
 ```
@@ -161,8 +192,9 @@ StoryWeaver/
 │   ├── 📂 app/
 │   │   ├── 📂 api/            # RESTful API 路由定义
 │   │   ├── 📂 models/         # SQLAlchemy 数据库模型
-│   │   ├── 📂 services/       # 核心业务逻辑 (LLM调用/大纲生成/摘要)
+│   │   ├── 📂 services/       # usecase/service 业务逻辑层
 │   │   └── 📂 rag/            # 向量数据库检索服务
+│   ├── 📄 TESTING.md          # 后端测试与CI说明
 │   ├── 📄 requirements.txt    # Python 依赖
 │   └── 📄 main.py             # 入口文件
 │
@@ -174,6 +206,7 @@ StoryWeaver/
 │   │   └── 📂 api/            # Axios 请求封装
 │   └── 📄 package.json        # Node 依赖
 │
+├── 📂 .github/workflows/       # CI 工作流
 └── 📄 DEV_DOC.md               # 详细开发文档
 ```
 
