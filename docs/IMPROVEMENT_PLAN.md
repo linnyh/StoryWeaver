@@ -12,23 +12,23 @@
 
 | 步骤 | 内容 | 负责模块 | 验收标准 |
 |------|------|----------|----------|
-| 1.1.1 | 将 `*.db-wal`、`*.db-shm` 加入 `.gitignore`，避免 SQLite WAL 文件被提交 | 根目录 | `git status` 不再出现 db-wal/db-shm |
-| 1.1.2 | 补充/完善 `backend/.env.example`：列出 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL` 等必填项及说明 | backend | 新克隆项目可按 example 配置并启动 |
-| 1.1.3 | 生产环境 CORS：从 `allow_origins` 中移除 `"*"`，仅保留明确前端域名 | backend `main.py` | 生产部署时不会对任意域名开放 |
+| 1.1.1 ✅ | 将 `*.db-wal`、`*.db-shm` 加入 `.gitignore`，避免 SQLite WAL 文件被提交 | 根目录 | `git status` 不再出现 db-wal/db-shm |
+| 1.1.2 ✅ | 补充/完善 `backend/.env.example`：列出 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL` 等必填项及说明 | backend | 新克隆项目可按 example 配置并启动 |
+| 1.1.3 ✅ | 生产环境 CORS：从 `allow_origins` 中移除 `"*"`，仅保留明确前端域名 | backend `main.py` | 生产部署时不会对任意域名开放 |
 
 ### 1.2 API 与前端请求一致性
 
 | 步骤 | 内容 | 负责模块 | 验收标准 |
 |------|------|----------|----------|
-| 1.2.1 | 确认 Vite proxy：`/api` → 后端服务（如 `http://localhost:8000`） | frontend `vite.config.js` | 前端请求 `/api/xxx` 能正确转发到后端 |
-| 1.2.2 | 统一前端 API baseURL：若 proxy 已转发 `/api`，则 baseURL 用 `''` 或 `'/api'` 且所有请求路径不再重复写 `/api` | frontend `src/api/index.js` | 无 404、无重复路径 |
+| 1.2.1 ✅ | 确认 Vite proxy：`/api` → 后端服务（如 `http://localhost:8000`） | frontend `vite.config.js` | 前端请求 `/api/xxx` 能正确转发到后端 |
+| 1.2.2 ✅ | 统一前端 API baseURL：若 proxy 已转发 `/api`，则 baseURL 用 `''` 或 `'/api'` 且所有请求路径不再重复写 `/api` | frontend `src/api/index.js` | 无 404、无重复路径 |
 
 ### 1.3 RAG 按小说隔离
 
 | 步骤 | 内容 | 负责模块 | 验收标准 |
 |------|------|----------|----------|
-| 1.3.1 | 在所有 RAG 检索入口（如 `retrieve_context`、写作上下文组装）中传入并过滤 `novel_id`，确保只检索当前小说的角色/设定/摘要 | backend `app/rag/service.py`、调用 RAG 的 usecase/generator | 切换小说时不会混用其他小说的 RAG 内容 |
-| 1.3.2 | 为 RAG 检索增加单测：给定不同 `novel_id` 的数据，验证检索结果仅来自对应小说 | backend tests | 有覆盖 novel 隔离的用例 |
+| 1.3.1 ✅ | 在所有 RAG 检索入口（如 `retrieve_context`、写作上下文组装）中传入并过滤 `novel_id`，确保只检索当前小说的角色/设定/摘要 | backend `app/rag/service.py`、调用 RAG 的 usecase/generator | 切换小说时不会混用其他小说的 RAG 内容 |
+| 1.3.2 ✅ | 为 RAG 检索增加单测：给定不同 `novel_id` 的数据，验证检索结果仅来自对应小说 | backend tests | 有覆盖 novel 隔离的用例 |
 
 ---
 

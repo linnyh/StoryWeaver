@@ -612,7 +612,14 @@ class SceneGenerator:
             yield {"type": "content", "content": full_draft}
 
     async def _build_context(self, scene: Scene, db: AsyncSession) -> Dict[str, Any]:
+        from app.models import Chapter
+
         context = {"prev_summaries": [], "character_contexts": [], "lore_contexts": []}
+
+        # 获取当前场景所属章节与 novel_id，供 RAG 检索按小说隔离
+        chapter_result = await db.execute(select(Chapter).where(Chapter.id == scene.chapter_id))
+        current_chapter = chapter_result.scalar_one_or_none()
+        novel_id = current_chapter.novel_id if current_chapter else None
 
         print(f"DEBUG: Building context for scene {scene.id}, order_index={scene.order_index}, chapter_id={scene.chapter_id}")
 
@@ -633,43 +640,35 @@ class SceneGenerator:
             print(f"DEBUG: - Scene {s.id}, order={s.order_index}, summary_len={len(s.summary) if s.summary else 0}")
         
         # 2. 如果同章节没有前序场景（即这是本章第一个场景），则尝试获取上一章的摘要
-        if not prev_scenes:
+        if not prev_scenes and current_chapter:
             print("DEBUG: No prev scenes in chapter, looking for prev chapter...")
-            # 获取当前场景所属章节
-            from app.models import Chapter
-            current_chapter_result = await db.execute(select(Chapter).where(Chapter.id == scene.chapter_id))
-            current_chapter = current_chapter_result.scalar_one_or_none()
-            
-            if current_chapter:
-                # 获取上一章
-                prev_chapter_result = await db.execute(
-                    select(Chapter)
-                    .where(Chapter.novel_id == current_chapter.novel_id)
-                    .where(Chapter.order_index < current_chapter.order_index)
-                    .order_by(Chapter.order_index.desc())
-                    .limit(1)
+            # 获取上一章
+            prev_chapter_result = await db.execute(
+                select(Chapter)
+                .where(Chapter.novel_id == current_chapter.novel_id)
+                .where(Chapter.order_index < current_chapter.order_index)
+                .order_by(Chapter.order_index.desc())
+                .limit(1)
+            )
+            prev_chapter = prev_chapter_result.scalar_one_or_none()
+
+            if prev_chapter:
+                print(f"DEBUG: Found prev chapter {prev_chapter.id}")
+                prev_scenes_result = await db.execute(
+                    select(Scene)
+                    .where(Scene.chapter_id == prev_chapter.id)
+                    .order_by(Scene.order_index.desc())
+                    .limit(3)  # 取上一章最后3个场景
                 )
-                prev_chapter = prev_chapter_result.scalar_one_or_none()
-                
-                # 如果有上一章，获取上一章的最后几个场景摘要作为前情提要
-                if prev_chapter:
-                    print(f"DEBUG: Found prev chapter {prev_chapter.id}")
-                    prev_scenes_result = await db.execute(
-                        select(Scene)
-                        .where(Scene.chapter_id == prev_chapter.id)
-                        .order_by(Scene.order_index.desc())
-                        .limit(3) # 取上一章最后3个场景
-                    )
-                    prev_scenes = prev_scenes_result.scalars().all()
-            
-            # 如果连上一章都没有（即全书第一章），或者上一章没有场景，尝试使用“小说故事核(Premise)”作为初始前情提要
-            if not prev_scenes and current_chapter:
+                prev_scenes = prev_scenes_result.scalars().all()
+
+            # 如果连上一章都没有（即全书第一章），或上一章没有场景，用小说故事核作为前情提要
+            if not prev_scenes:
                 print("DEBUG: No prev chapter or scenes, using premise")
                 from app.models import Novel
                 novel_result = await db.execute(select(Novel).where(Novel.id == current_chapter.novel_id))
                 novel = novel_result.scalar_one_or_none()
                 if novel and novel.premise:
-                    # 构造一个伪场景对象来传递 premise
                     class MockScene:
                         summary = f"【故事背景】：{novel.premise}"
                     prev_scenes = [MockScene()]
@@ -700,7 +699,8 @@ class SceneGenerator:
                     char_contexts = rag_service.retrieve_context(
                         query=f"{character.name} {character.bio}",
                         type="character",
-                        top_k=1
+                        top_k=1,
+                        novel_id=novel_id,
                     )
                     context["character_contexts"].append({
                         "id": character.id,
@@ -743,7 +743,8 @@ class SceneGenerator:
             lore_contexts = rag_service.retrieve_context(
                 query=scene.beat_description,
                 type="lore",
-                top_k=3
+                top_k=3,
+                novel_id=novel_id,
             )
             context["lore_contexts"] = lore_contexts
 

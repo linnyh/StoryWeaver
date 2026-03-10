@@ -167,7 +167,8 @@ python -m unittest -q \
   test_scene_postprocess_unittest.py \
   test_chapter_usecases_unittest.py \
   test_novel_usecases_unittest.py \
-  test_api_integration_unittest.py
+  test_api_integration_unittest.py \
+  test_rag_novel_isolation.py
 ```
 
 CI 工作流：

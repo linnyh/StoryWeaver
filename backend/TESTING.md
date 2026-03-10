@@ -16,6 +16,7 @@ This project currently uses Python `unittest` for backend tests.
 - `test_chapter_usecases_unittest.py`
 - `test_novel_usecases_unittest.py`
 - `test_api_integration_unittest.py`
+- `test_rag_novel_isolation.py`（RAG 按 novel_id 隔离）
 
 ## Run Tests Locally
 
@@ -29,7 +30,8 @@ python -m unittest -q \
   test_scene_postprocess_unittest.py \
   test_chapter_usecases_unittest.py \
   test_novel_usecases_unittest.py \
-  test_api_integration_unittest.py
+  test_api_integration_unittest.py \
+  test_rag_novel_isolation.py
 ```
 
 Run a single file:
