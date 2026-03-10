@@ -206,9 +206,12 @@ StoryWeaver/
 │   │   └── 📂 api/            # Axios 请求封装
 │   └── 📄 package.json        # Node 依赖
 │
+├── 📂 docs/                    # 文档（数据库设计、改进计划等）
 ├── 📂 .github/workflows/       # CI 工作流
 └── 📄 DEV_DOC.md               # 详细开发文档
 ```
+
+改进与路线图见：[docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)。
 
 ## 🤝 贡献指南
 
