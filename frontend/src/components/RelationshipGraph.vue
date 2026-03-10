@@ -56,6 +56,7 @@ const initGraph = () => {
   const width = graphContainer.value.clientWidth || 800;
   const height = graphContainer.value.clientHeight || 500;
 
+  const nodeIds = new Set(props.characters.map(c => c.id));
   const nodes = props.characters.map(char => ({
     id: char.id,
     data: {
@@ -69,39 +70,46 @@ const initGraph = () => {
     }
   }));
 
-  const edges = props.relationships.map(rel => {
-    let color = '#999';
-    let label = rel.affinity_score.toString();
-    
-    if (rel.affinity_score > 60) color = '#00ff9d'; // 亲密 (Neon Green)
-    else if (rel.affinity_score > 20) color = '#00f0ff'; // 友善 (Neon Blue)
-    else if (rel.affinity_score < -60) color = '#ff2a6d'; // 仇恨 (Neon Red)
-    else if (rel.affinity_score < -20) color = '#f5d300'; // 敌对 (Neon Yellow)
+  const edges = props.relationships
+    .filter(rel => {
+      const a = rel.character_a_id ?? rel.character_a?.id;
+      const b = rel.character_b_id ?? rel.character_b?.id;
+      return a && b && nodeIds.has(a) && nodeIds.has(b);
+    })
+    .map((rel, index) => {
+      const score = Number(rel.affinity_score) ?? 0;
+      let color = '#999';
+      const label = String(score);
 
-    return {
-      source: rel.character_a_id,
-      target: rel.character_b_id,
-      data: {
-        label: label,
-        ...rel
-      },
-      style: {
-        stroke: color,
-        lineWidth: Math.max(1, Math.abs(rel.affinity_score) / 20),
-        endArrow: true,
-        labelText: label,
-        labelFill: color,
-        labelBackground: true,
-        labelBackgroundFill: '#1a1a2e',
-        labelBackgroundOpacity: 0.8,
-        labelBackgroundRadius: 4,
-      }
-    };
-  });
-  
-  // Debug log
-  console.log('Graph Nodes:', nodes);
-  console.log('Graph Edges:', edges);
+      if (score > 60) color = '#00ff9d';
+      else if (score > 20) color = '#00f0ff';
+      else if (score < -60) color = '#ff2a6d';
+      else if (score < -20) color = '#f5d300';
+
+      const source = rel.character_a_id ?? rel.character_a?.id;
+      const target = rel.character_b_id ?? rel.character_b?.id;
+
+      return {
+        id: rel.id || `edge-${source}-${target}-${index}`,
+        source,
+        target,
+        data: {
+          label,
+          ...rel
+        },
+        style: {
+          stroke: color,
+          lineWidth: Math.max(1, Math.abs(score) / 20),
+          endArrow: true,
+          labelText: label,
+          labelFill: color,
+          labelBackground: true,
+          labelBackgroundFill: '#1a1a2e',
+          labelBackgroundOpacity: 0.8,
+          labelBackgroundRadius: 4,
+        }
+      };
+    });
   
   // Clean up old instance
   if (graph) {

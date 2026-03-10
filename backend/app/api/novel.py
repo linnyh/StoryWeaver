@@ -1,12 +1,12 @@
 """Novel API"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional, List
 from app.database import get_db
-from app.models import Novel, Relationship
+from app.models import Novel, Relationship, Chapter, Scene
 from app.services.novel_usecases import (
     build_novel_export_payload,
     delete_rag_summary_for_novel,
@@ -58,6 +58,21 @@ async def create_novel(novel: NovelCreate, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(db_novel)
     return db_novel
+
+
+@router.get("/stats")
+async def get_stats(db: AsyncSession = Depends(get_db)):
+    """全局统计：小说数、章节数、总字数（正文字符数）"""
+    novels_result = await db.execute(select(func.count(Novel.id)))
+    chapters_result = await db.execute(select(func.count(Chapter.id)))
+    words_result = await db.execute(
+        select(func.coalesce(func.sum(func.length(Scene.content)), 0)).select_from(Scene)
+    )
+    return {
+        "novels_count": novels_result.scalar() or 0,
+        "chapters_count": chapters_result.scalar() or 0,
+        "words_count": int(words_result.scalar() or 0),
+    }
 
 
 @router.get("/", response_model=list[NovelResponse])

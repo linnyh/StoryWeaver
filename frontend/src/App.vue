@@ -25,16 +25,6 @@
             <div v-if="isActive" class="ml-auto w-1.5 h-1.5 rounded-full bg-neon-blue shadow-[0_0_8px_rgba(0,240,255,0.8)]"></div>
           </div>
         </router-link>
-        
-        <router-link to="/" custom v-slot="{ navigate, isActive }">
-          <div @click="navigate" 
-               class="flex items-center px-4 py-3 rounded-xl cursor-pointer transition-all duration-300 group"
-               :class="isActive ? 'bg-neon-blue/10 text-neon-blue border border-neon-blue/20 shadow-[0_0_15px_rgba(0,240,255,0.1)]' : 'hover:bg-white/5 text-gray-400 hover:text-white border border-transparent'">
-            <el-icon :class="isActive ? 'text-neon-blue' : 'text-gray-500 group-hover:text-white'" class="mr-3 text-lg transition-colors"><Folder /></el-icon>
-            <span class="font-medium">我的作品</span>
-            <div v-if="isActive" class="ml-auto w-1.5 h-1.5 rounded-full bg-neon-blue shadow-[0_0_8px_rgba(0,240,255,0.8)]"></div>
-          </div>
-        </router-link>
         <router-link to="/settings" custom v-slot="{ navigate, isActive }">
           <div @click="navigate" 
                class="flex items-center px-4 py-3 rounded-xl cursor-pointer transition-all duration-300 group"
@@ -86,7 +76,7 @@
 </template>
 
 <script setup>
-import { HomeFilled, Folder, Setting, ArrowRight, Bell } from '@element-plus/icons-vue'
+import { HomeFilled, Setting, ArrowRight, Bell } from '@element-plus/icons-vue'
 </script>
 
 <style>

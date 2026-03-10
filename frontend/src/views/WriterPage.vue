@@ -78,9 +78,9 @@
           </button>
           
           <button 
-            v-if="editorialLogs.length > 0"
             @click="showLogs = true"
-            class="px-3 py-1.5 rounded-lg bg-neon-blue/10 hover:bg-neon-blue/20 border border-neon-blue/20 text-xs font-medium text-neon-blue transition-colors flex items-center gap-1"
+            class="px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1"
+            :class="editorialLogs.length > 0 ? 'bg-neon-blue/10 hover:bg-neon-blue/20 border-neon-blue/20 text-neon-blue' : 'bg-white/5 hover:bg-white/10 border-white/5 text-gray-400 hover:text-gray-300'"
           >
             <el-icon><DataAnalysis /></el-icon>
             Logs
@@ -281,8 +281,8 @@
             <span class="whitespace-pre-wrap">{{ log }}</span>
           </div>
         </div>
-        <div v-if="editorialLogs.length === 0" class="text-center text-gray-500 py-8">
-          No logs available yet.
+        <div v-if="editorialLogs.length === 0" class="text-center text-gray-500 py-8 text-sm">
+          开启 Review 并生成后将在此显示审稿日志。
         </div>
       </div>
     </el-dialog>

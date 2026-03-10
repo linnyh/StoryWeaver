@@ -9,6 +9,7 @@ const api = axios.create({
 export const novelApi = {
   create: (data) => api.post('/novels/', data),
   list: () => api.get('/novels/'),
+  getStats: () => api.get('/novels/stats'),
   get: (id) => api.get(`/novels/${id}`),
   update: (id, data) => api.put(`/novels/${id}`, data),
   delete: (id) => api.delete(`/novels/${id}`),

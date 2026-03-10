@@ -152,11 +152,13 @@
       <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50">
         <span class="font-display text-white font-medium tracking-wide">Database</span>
         <div class="flex gap-2">
-            <button @click="showGraphDialog = true" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-purple transition-colors" title="Relationship Map">
+            <button @click="showGraphDialog = true" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-purple transition-colors text-xs font-medium" title="关系图谱">
               <el-icon><Share /></el-icon>
+              <span>关系图谱</span>
             </button>
-            <button @click="goToRag" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="RAG Knowledge">
+            <button @click="goToRag" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors text-xs font-medium" title="RAG 知识库">
               <el-icon><Files /></el-icon>
+              <span>知识库</span>
             </button>
         </div>
       </div>

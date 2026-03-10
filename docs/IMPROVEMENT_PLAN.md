@@ -40,22 +40,22 @@
 
 | 步骤 | 内容 | 负责模块 | 验收标准 |
 |------|------|----------|----------|
-| 2.1.1 | 新增统计接口：如 `GET /api/novels/stats`，返回当前（或全局）的 novels 数、总章节数、总字数 | backend `app/api/novel.py` | 接口返回正确聚合数据 |
-| 2.1.2 | 首页使用上述接口展示「Novels / Chapters / Words」真实数据，去掉写死的 12、24k | frontend `HomePage.vue` | 数字随数据变化 |
-| 2.1.3 | 侧栏导航：若「首页」与「我的作品」功能重复，合并为一个入口或区分（如「工作台」+「作品库」），并修正 `router-link` 的 `to` | frontend `App.vue` | 无重复入口、点击行为符合预期 |
+| 2.1.1 ✅ | 新增统计接口：如 `GET /api/novels/stats`，返回当前（或全局）的 novels 数、总章节数、总字数 | backend `app/api/novel.py` | 接口返回正确聚合数据 |
+| 2.1.2 ✅ | 首页使用上述接口展示「Novels / Chapters / Words」真实数据，去掉写死的 12、24k | frontend `HomePage.vue` | 数字随数据变化 |
+| 2.1.3 ✅ | 侧栏导航：若「首页」与「我的作品」功能重复，合并为一个入口或区分（如「工作台」+「作品库」），并修正 `router-link` 的 `to` | frontend `App.vue` | 无重复入口、点击行为符合预期 |
 
 ### 2.2 关系图谱与审稿日志入口
 
 | 步骤 | 内容 | 负责模块 | 验收标准 |
 |------|------|----------|----------|
-| 2.2.1 | 在小说详情页（NovelPage）或侧栏增加「关系图谱」入口，跳转至关系图谱视图（或已有 RagPage/独立路由） | frontend | 从小说页可一键打开关系图谱 |
-| 2.2.2 | 写作页「Logs」在无日志时显示简短说明：「开启 Review 并生成后将在此显示审稿日志」 | frontend `WriterPage.vue` | 新用户能理解 Logs 用途 |
+| 2.2.1 ✅ | 在小说详情页（NovelPage）或侧栏增加「关系图谱」入口，跳转至关系图谱视图（或已有 RagPage/独立路由） | frontend | 从小说页可一键打开关系图谱 |
+| 2.2.2 ✅ | 写作页「Logs」在无日志时显示简短说明：「开启 Review 并生成后将在此显示审稿日志」 | frontend `WriterPage.vue` | 新用户能理解 Logs 用途 |
 
 ### 2.3 文档与帮助
 
 | 步骤 | 内容 | 负责模块 | 验收标准 |
 |------|------|----------|----------|
-| 2.3.1 | 首页「Documentation」按钮：链接到 README、DEV_DOC 或在线文档；若无则改为「帮助」并链到项目内说明 | frontend `HomePage.vue` | 按钮有效、不误导 |
+| 2.3.1 ✅ | 首页「Documentation」按钮：链接到 README、DEV_DOC 或在线文档；若无则改为「帮助」并链到项目内说明 | frontend `HomePage.vue` | 按钮有效、不误导 |
 
 ---
 
