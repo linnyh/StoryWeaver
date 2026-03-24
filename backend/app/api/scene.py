@@ -11,17 +11,24 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.logging import get_logger
-from app.models import Scene
+from app.models import Scene, SceneVersion, Chapter, Character
 from app.services import scene_generator
 from app.services.scene_postprocess import (
     analyze_state_and_relationships,
 )
 from app.services.scene_image_service import generate_scene_images
+from app.services.scene_video_service import (
+    create_scene_video_task,
+    query_video_task_status,
+    fetch_video_download_url,
+    _build_video_prompt,
+)
 from app.services.scene_usecases import (
     summarize_scene_content,
     update_scene_and_schedule_tasks,
 )
 from app.api.scene_chat import router as chat_router
+from app.api.settings import get_llm_config_from_db
 from app.config import settings
 
 logger = get_logger(__name__)
@@ -52,9 +59,17 @@ class SceneDetailResponse(BaseModel):
     emotional_target: Optional[str] = None
     image_url: Optional[str] = None
     image_prompts: Optional[list[dict]] = None
+    video_task_id: Optional[str] = None
+    video_url: Optional[str] = None
+    video_prompt: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class GenerateVideoRequest(BaseModel):
+    prompt: Optional[str] = None  # 可选，不传则用场景信息自动拼装
+
 
 router = APIRouter()
 router.include_router(chat_router)
@@ -87,10 +102,75 @@ async def get_scene(scene_id: str, db: AsyncSession = Depends(get_db)):
     response.context_summary = context_summary
     return response
 
+
+class SceneVersionItem(BaseModel):
+    id: str
+    scene_id: str
+    content_preview: str
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/{scene_id}/versions", response_model=list)
+async def list_scene_versions(scene_id: str, db: AsyncSession = Depends(get_db)):
+    """列出场景历史版本（按时间倒序，最近在前）。"""
+    result = await db.execute(
+        select(SceneVersion)
+        .where(SceneVersion.scene_id == scene_id)
+        .order_by(SceneVersion.created_at.desc())
+    )
+    rows = result.scalars().all()
+    out = []
+    for v in rows:
+        created = v.created_at.isoformat() if hasattr(v.created_at, "isoformat") else str(v.created_at)
+        out.append({
+            "id": v.id,
+            "scene_id": v.scene_id,
+            "content_preview": (v.content or "")[:200],
+            "content": v.content,
+            "created_at": created,
+        })
+    return out
+
+
+class RestoreVersionRequest(BaseModel):
+    version_id: str
+
+
+@router.post("/{scene_id}/restore_version", response_model=SceneDetailResponse)
+async def restore_scene_version(
+    scene_id: str,
+    body: RestoreVersionRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """将场景正文恢复为指定历史版本。"""
+    ver_result = await db.execute(
+        select(SceneVersion).where(
+            SceneVersion.id == body.version_id,
+            SceneVersion.scene_id == scene_id,
+        )
+    )
+    version = ver_result.scalar_one_or_none()
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    scene_result = await db.execute(select(Scene).where(Scene.id == scene_id))
+    scene = scene_result.scalar_one_or_none()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    scene.content = version.content
+    await db.commit()
+    await db.refresh(scene)
+    response = SceneDetailResponse.model_validate(scene)
+    response.context_summary = ""
+    return response
+
+
 @router.get("/{scene_id}/generate")
 async def generate_scene_content(
     scene_id: str,
-    enable_editorial: bool = True, # Query param, default True
+    enable_editorial: bool = False,  # 默认关闭，优先生成速度；开启后会进行逻辑/爽点/思想审查
     db: AsyncSession = Depends(get_db)
 ):
     """生成场景正文 (SSE 流式)"""
@@ -105,7 +185,13 @@ async def generate_scene_content(
         full_content = ""
 
         try:
-            async for item in scene_generator.generate_scene_content(scene_id, db, enable_editorial=enable_editorial):
+            llm_config = await get_llm_config_from_db(db)
+            async for item in scene_generator.generate_scene_content(
+                scene_id, db,
+                enable_editorial=enable_editorial,
+                writing_model=llm_config.writing_model,
+                editorial_model=llm_config.editorial_model if enable_editorial else None,
+            ):
                 # item 是字典: {"type": "...", "content": "..."}
                 
                 if item["type"] == "content":
@@ -151,10 +237,8 @@ async def generate_scene_image(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    生成场景分镜配图 (MiniMax) - 多张
-    1. 调用 LLM 生成 3-4 个分镜 Prompt
-    2. 并行调用 MiniMax 文生图
-    3. 存储结果
+    生成场景分镜配图 (MiniMax) - 多张。
+    若场景中有角色且该角色已生成肖像，则使用主体参考使分镜中人物与肖像一致。
     """
     if not settings.minimax_api_key:
         raise HTTPException(status_code=500, detail="MiniMax API Key not configured")
@@ -163,11 +247,31 @@ async def generate_scene_image(
     scene = result.scalar_one_or_none()
     if not scene:
         raise HTTPException(status_code=404, detail="Scene not found")
-        
+
+    ch_result = await db.execute(select(Chapter).where(Chapter.id == scene.chapter_id))
+    chapter = ch_result.scalar_one_or_none()
+    novel_id = chapter.novel_id if chapter else None
+    subject_reference_url = None
+    if novel_id:
+        present_list = (scene.characters_present or []) if isinstance(scene.characters_present, list) else []
+        char_result = await db.execute(
+            select(Character).where(
+                Character.novel_id == novel_id,
+                Character.portrait_url.isnot(None),
+            )
+        )
+        for c in char_result.scalars().all():
+            if not (c.portrait_url and c.portrait_url.strip()):
+                continue
+            if not present_list or c.id in present_list or (getattr(c, "name", None) and c.name in present_list):
+                subject_reference_url = c.portrait_url.strip()
+                break
+
     generated_images = await generate_scene_images(
         scene_location=scene.location,
         scene_content=scene.content,
         scene_beat_description=scene.beat_description,
+        subject_reference_url=subject_reference_url,
     )
     
     if not generated_images:
@@ -182,6 +286,108 @@ async def generate_scene_image(
     await db.commit()
     
     return {"scene_id": scene_id, "images": generated_images}
+
+
+@router.post("/{scene_id}/generate_video")
+async def generate_scene_video(
+    scene_id: str,
+    body: Optional[GenerateVideoRequest] = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    为分镜创建视频生成任务（MiniMax 主体参考），人物与角色肖像一致。
+    可传 body.prompt 使用自定义提示词；不传则按场景地点、节拍、分镜 prompt 自动拼装。
+    """
+    if not settings.minimax_api_key:
+        raise HTTPException(status_code=500, detail="MiniMax API Key not configured")
+    result = await db.execute(select(Scene).where(Scene.id == scene_id))
+    scene = result.scalar_one_or_none()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    ch_result = await db.execute(select(Chapter).where(Chapter.id == scene.chapter_id))
+    chapter = ch_result.scalar_one_or_none()
+    novel_id = chapter.novel_id if chapter else None
+    if not novel_id:
+        raise HTTPException(status_code=400, detail="Scene has no novel")
+    # characters_present 可能是角色 ID 或名字列表（beats 多为名字）；名单可能为空或与 DB 不一致，故需回退
+    present_list = (scene.characters_present or []) if isinstance(scene.characters_present, list) else []
+    present_set = {str(x).strip() for x in present_list if x is not None}
+    portrait_urls = []
+    fallback_urls = []
+    char_result = await db.execute(
+        select(Character).where(
+            Character.novel_id == novel_id,
+            Character.portrait_url.isnot(None),
+        )
+    )
+    for c in char_result.scalars().all():
+        url = (c.portrait_url or "").strip()
+        if not url:
+            continue
+        if not present_set:
+            portrait_urls.append(url)
+        elif c.id in present_set or (getattr(c, "name", None) and (c.name or "").strip() in present_set):
+            portrait_urls.append(url)
+        fallback_urls.append(url)
+    if not portrait_urls:
+        portrait_urls = fallback_urls
+    if not portrait_urls:
+        raise HTTPException(
+            status_code=400,
+            detail="请先为场景中的角色生成肖像，至少一个角色需有肖像图",
+        )
+    first_prompt = None
+    if scene.image_prompts and len(scene.image_prompts) > 0 and isinstance(scene.image_prompts[0], dict):
+        first_prompt = scene.image_prompts[0].get("prompt")
+    prompt = (
+        (body and body.prompt and body.prompt.strip())
+        or _build_video_prompt(
+            scene.location,
+            scene.beat_description,
+            first_prompt,
+        )
+    )
+    task_id, err_msg = await create_scene_video_task(prompt=prompt, subject_image_urls=portrait_urls)
+    if not task_id:
+        raise HTTPException(
+            status_code=502,
+            detail=err_msg or "Video task creation failed",
+        )
+    scene.video_task_id = task_id
+    scene.video_url = None
+    scene.video_prompt = prompt
+    await db.commit()
+    await db.refresh(scene)
+    return {"scene_id": scene_id, "task_id": task_id, "status": "Pending"}
+
+
+@router.get("/{scene_id}/video_status")
+async def get_scene_video_status(scene_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    轮询分镜视频任务状态。若任务成功则拉取 video_url 并写入场景，返回 status 与 video_url。
+    """
+    result = await db.execute(select(Scene).where(Scene.id == scene_id))
+    scene = result.scalar_one_or_none()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+    task_id = scene.video_task_id
+    if not task_id:
+        return {"status": "None", "video_url": scene.video_url}
+    status, file_id = await query_video_task_status(task_id)
+    if status == "Success" and file_id:
+        video_url = await fetch_video_download_url(file_id)
+        if video_url:
+            scene.video_url = video_url
+            scene.video_task_id = None
+            await db.commit()
+            await db.refresh(scene)
+            return {"status": "Success", "video_url": video_url}
+        return {"status": "Success", "video_url": None}
+    if status == "Fail":
+        scene.video_task_id = None
+        await db.commit()
+        return {"status": "Fail", "video_url": None}
+    return {"status": status or "Pending", "video_url": None}
 
 
 @router.post("/{scene_id}/summarize")
