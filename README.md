@@ -83,6 +83,8 @@ flowchart TD
     style Context fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
+**导出**：在小说详情页点击导出按钮，可下载**全书正文**，格式为 **UTF-8 纯文本 (.txt)**，包含书名、简介及各章节场景内容。
+
 ## 🛠 技术栈
 
 ### Frontend (前端)
@@ -131,6 +133,13 @@ cp .env.example .env
 # 编辑 .env 文件，填入你的 OpenAI 或 MiniMax API Key
 ```
 
+**模型配置说明**（在应用内「设置」页可进一步配置）：
+
+- **Model Name（通用）**：默认用于写作、摘要、审稿等所有 LLM 调用。
+- **写作模型**（可选）：留空则使用通用模型。可用更强模型保证正文质量。
+- **摘要模型**（可选）：留空则使用通用模型。建议使用更小/更便宜的模型以节省成本（摘要任务对能力要求较低）。
+- **审稿模型**（可选）：开启「Review」时的多智能体审稿所用模型，留空则使用通用模型。
+
 ### 3. 前端设置
 
 ```bash
@@ -168,7 +177,8 @@ python -m unittest -q \
   test_chapter_usecases_unittest.py \
   test_novel_usecases_unittest.py \
   test_api_integration_unittest.py \
-  test_rag_novel_isolation.py
+  test_rag_novel_isolation.py \
+  test_scene_sse_and_versions.py
 ```
 
 CI 工作流：
