@@ -17,6 +17,8 @@ pip-log.txt
 pip-delete-this-directory.txt
 backend/chroma_data/
 backend/storyweaver.db
+backend/storyweaver.db-wal
+backend/storyweaver.db-shm
 backend/instance/
 
 # Node / Frontend

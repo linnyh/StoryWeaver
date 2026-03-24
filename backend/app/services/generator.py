@@ -148,34 +148,45 @@ class LLMClient:
     async def refresh_config(self, db: AsyncSession):
         """从数据库刷新配置"""
         from app.models.system import SystemConfig
-        
+
         stmt = select(SystemConfig).where(SystemConfig.key.in_([
-            "openai_api_key", "openai_base_url", "openai_model"
+            "openai_api_key", "openai_base_url", "openai_model",
+            "writing_model", "summary_model", "editorial_model",
         ]))
         result = await db.execute(stmt)
         configs = {row.key: row.value for row in result.scalars().all()}
-        
-        # 优先使用数据库配置，否则回退到环境变量
+        base = configs.get("openai_model") or settings.openai_model
         self.api_key = configs.get("openai_api_key") or settings.openai_api_key or settings.minimax_api_key
         self.base_url = configs.get("openai_base_url") or settings.openai_base_url or settings.minimax_base_url
-        self.model = configs.get("openai_model") or settings.openai_model
-        
+        self.model = base
+        self.writing_model = configs.get("writing_model") or base
+        self.summary_model = configs.get("summary_model") or base
+        self.editorial_model = configs.get("editorial_model") or base
         self._init_client()
         print(f"LLM Client refreshed with model: {self.model}, base_url: {self.base_url}")
 
-    async def generate(self, prompt: str) -> str:
-        """同步生成文本"""
-        if not self.client:
+    def _client_for_model(self, model: Optional[str] = None):
+        """返回用于指定模型的客户端（不传则用默认）"""
+        if not self.api_key or not self.base_url:
+            return None
+        m = (model or self.model).strip() if (model or self.model) else self.model
+        return OpenAICompatClient(api_key=self.api_key, base_url=self.base_url, model=m)
+
+    async def generate(self, prompt: str, model_override: Optional[str] = None) -> str:
+        """同步生成文本，可选 model_override（写作/摘要/审稿区分）"""
+        client = self._client_for_model(model_override) if model_override else self.client
+        if not client:
             return self._mock_response(prompt)
         try:
-            return await self.client.generate(prompt)
+            return await client.generate(prompt)
         except Exception as e:
             print(f"Error generating text: {e}")
             return ""
 
-    async def generate_stream(self, prompt: str) -> AsyncGenerator[str, None]:
-        """流式生成文本"""
-        if not self.client:
+    async def generate_stream(self, prompt: str, model_override: Optional[str] = None) -> AsyncGenerator[str, None]:
+        """流式生成文本，可选 model_override"""
+        client = self._client_for_model(model_override) if model_override else self.client
+        if not client:
             response = self._mock_response(prompt)
             for char in response:
                 yield char
@@ -185,7 +196,7 @@ class LLMClient:
         skip_content = False
         buffer = ""
 
-        async for chunk in self.client.generate_stream(prompt):
+        async for chunk in client.generate_stream(prompt):
             # 处理思考内容过滤逻辑
             # 将新 chunk 拼接到缓冲区
             buffer += chunk
@@ -533,10 +544,12 @@ class SceneGenerator:
         self,
         scene_id: str,
         db: AsyncSession,
-        enable_editorial: bool = True  # 新增参数
+        enable_editorial: bool = False,  # 默认关闭以优先速度；开启则走多智能体审稿
+        writing_model: Optional[str] = None,  # 写作模型，留空用默认
+        editorial_model: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, str], None]:
         from app.models import Scene, Chapter, Novel
-        
+
         # 联合查询 Scene 和 Novel
         stmt = (
             select(Scene, Novel)
@@ -546,10 +559,10 @@ class SceneGenerator:
         )
         result = await db.execute(stmt)
         row = result.first()
-        
+
         if not row:
             return
-            
+
         scene, novel = row
 
         context = await self._build_context(scene, db)
@@ -559,7 +572,7 @@ class SceneGenerator:
         if not enable_editorial:
             yield {"type": "system", "content": "正在直接生成..."}
             full_content = ""
-            async for chunk in self.llm.generate_stream(prompt):
+            async for chunk in self.llm.generate_stream(prompt, model_override=writing_model):
                  # 过滤思考内容
                  chunk_clean = chunk.replace('<think>', '').replace('</think>', '') # 简单过滤
                  # 注意：流式生成时，思考标签可能被拆分，这里仅做简单处理
@@ -575,9 +588,9 @@ class SceneGenerator:
 
         # 1. 生成初稿
         yield {"type": "system", "content": "正在生成初稿..."}
-        
-        # 使用同步生成获取完整初稿
-        full_draft = await self.llm.generate(prompt)
+
+        # 使用同步生成获取完整初稿（可用写作模型或审稿模型覆盖）
+        full_draft = await self.llm.generate(prompt, model_override=writing_model or editorial_model)
         
         # 立即清理初稿中的思考标签和 Markdown 加粗
         full_draft = re.sub(r'<think>.*?</think>', '', full_draft, flags=re.DOTALL).strip()
@@ -600,19 +613,25 @@ class SceneGenerator:
             final_content = review_result["content"]
             logs = review_result["logs"]
             
-            # 4. 输出最终正文
-            yield {"type": "content", "content": final_content}
-            
-            # 5. 输出评审日志
+            # 4. 先输出评审日志（再输出正文），避免大块 content 导致前端缓冲/解析异常而收不到 log
             for log in logs:
                 yield {"type": "log", "content": log}
+            # 5. 输出最终正文
+            yield {"type": "content", "content": final_content}
                 
         except Exception as e:
             yield {"type": "system", "content": f"审稿过程发生异常: {str(e)}"}
             yield {"type": "content", "content": full_draft}
 
     async def _build_context(self, scene: Scene, db: AsyncSession) -> Dict[str, Any]:
+        from app.models import Chapter
+
         context = {"prev_summaries": [], "character_contexts": [], "lore_contexts": []}
+
+        # 获取当前场景所属章节与 novel_id，供 RAG 检索按小说隔离
+        chapter_result = await db.execute(select(Chapter).where(Chapter.id == scene.chapter_id))
+        current_chapter = chapter_result.scalar_one_or_none()
+        novel_id = current_chapter.novel_id if current_chapter else None
 
         print(f"DEBUG: Building context for scene {scene.id}, order_index={scene.order_index}, chapter_id={scene.chapter_id}")
 
@@ -633,43 +652,35 @@ class SceneGenerator:
             print(f"DEBUG: - Scene {s.id}, order={s.order_index}, summary_len={len(s.summary) if s.summary else 0}")
         
         # 2. 如果同章节没有前序场景（即这是本章第一个场景），则尝试获取上一章的摘要
-        if not prev_scenes:
+        if not prev_scenes and current_chapter:
             print("DEBUG: No prev scenes in chapter, looking for prev chapter...")
-            # 获取当前场景所属章节
-            from app.models import Chapter
-            current_chapter_result = await db.execute(select(Chapter).where(Chapter.id == scene.chapter_id))
-            current_chapter = current_chapter_result.scalar_one_or_none()
-            
-            if current_chapter:
-                # 获取上一章
-                prev_chapter_result = await db.execute(
-                    select(Chapter)
-                    .where(Chapter.novel_id == current_chapter.novel_id)
-                    .where(Chapter.order_index < current_chapter.order_index)
-                    .order_by(Chapter.order_index.desc())
-                    .limit(1)
+            # 获取上一章
+            prev_chapter_result = await db.execute(
+                select(Chapter)
+                .where(Chapter.novel_id == current_chapter.novel_id)
+                .where(Chapter.order_index < current_chapter.order_index)
+                .order_by(Chapter.order_index.desc())
+                .limit(1)
+            )
+            prev_chapter = prev_chapter_result.scalar_one_or_none()
+
+            if prev_chapter:
+                print(f"DEBUG: Found prev chapter {prev_chapter.id}")
+                prev_scenes_result = await db.execute(
+                    select(Scene)
+                    .where(Scene.chapter_id == prev_chapter.id)
+                    .order_by(Scene.order_index.desc())
+                    .limit(3)  # 取上一章最后3个场景
                 )
-                prev_chapter = prev_chapter_result.scalar_one_or_none()
-                
-                # 如果有上一章，获取上一章的最后几个场景摘要作为前情提要
-                if prev_chapter:
-                    print(f"DEBUG: Found prev chapter {prev_chapter.id}")
-                    prev_scenes_result = await db.execute(
-                        select(Scene)
-                        .where(Scene.chapter_id == prev_chapter.id)
-                        .order_by(Scene.order_index.desc())
-                        .limit(3) # 取上一章最后3个场景
-                    )
-                    prev_scenes = prev_scenes_result.scalars().all()
-            
-            # 如果连上一章都没有（即全书第一章），或者上一章没有场景，尝试使用“小说故事核(Premise)”作为初始前情提要
-            if not prev_scenes and current_chapter:
+                prev_scenes = prev_scenes_result.scalars().all()
+
+            # 如果连上一章都没有（即全书第一章），或上一章没有场景，用小说故事核作为前情提要
+            if not prev_scenes:
                 print("DEBUG: No prev chapter or scenes, using premise")
                 from app.models import Novel
                 novel_result = await db.execute(select(Novel).where(Novel.id == current_chapter.novel_id))
                 novel = novel_result.scalar_one_or_none()
                 if novel and novel.premise:
-                    # 构造一个伪场景对象来传递 premise
                     class MockScene:
                         summary = f"【故事背景】：{novel.premise}"
                     prev_scenes = [MockScene()]
@@ -700,7 +711,8 @@ class SceneGenerator:
                     char_contexts = rag_service.retrieve_context(
                         query=f"{character.name} {character.bio}",
                         type="character",
-                        top_k=1
+                        top_k=1,
+                        novel_id=novel_id,
                     )
                     context["character_contexts"].append({
                         "id": character.id,
@@ -743,7 +755,8 @@ class SceneGenerator:
             lore_contexts = rag_service.retrieve_context(
                 query=scene.beat_description,
                 type="lore",
-                top_k=3
+                top_k=3,
+                novel_id=novel_id,
             )
             context["lore_contexts"] = lore_contexts
 
@@ -810,9 +823,9 @@ class Summarizer:
     def __init__(self, llm: LLMClient):
         self.llm = llm
 
-    async def generate_summary(self, content: str) -> str:
+    async def generate_summary(self, content: str, model_override: Optional[str] = None) -> str:
         prompt = f"请将以下小说片段浓缩为200字摘要，保留关键剧情：\n\n{content}\n\n注意：请直接输出摘要，不要输出任何思考过程。"
-        summary = await self.llm.generate(prompt)
+        summary = await self.llm.generate(prompt, model_override=model_override)
         
         # 再次过滤思考内容，以防万一
         summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL)

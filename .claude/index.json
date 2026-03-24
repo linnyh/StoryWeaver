@@ -1,0 +1,167 @@
+{
+  "timestamp": "2026-03-24T20:19:46+08:00",
+  "project": "StoryWeaver",
+  "description": "AI 驱动的长篇小说辅助创作系统",
+  "version": "0.1.0",
+
+  "modules": [
+    {
+      "path": "backend/app/api",
+      "language": "Python",
+      "type": "api",
+      "entry": "backend/app/main.py",
+      "tests": ["backend/test_api_integration_unittest.py"],
+      "interfaces": [
+        "POST /api/novels - 创建小说",
+        "GET /api/novels - 列出小说",
+        "POST /api/scenes/{id}/generate - SSE 流式生成",
+        "POST /api/scenes/{id}/generate_image - 分镜配图"
+      ],
+      "has_claude_md": true
+    },
+    {
+      "path": "backend/app/models",
+      "language": "Python",
+      "type": "data",
+      "entry": null,
+      "tests": [],
+      "interfaces": [
+        "Novel - 小说模型",
+        "Character - 角色模型",
+        "Chapter - 章节模型",
+        "Scene - 场景模型",
+        "SceneVersion - 场景历史版本",
+        "Lore - 世界观设定",
+        "Relationship - 角色关系"
+      ],
+      "has_claude_md": true
+    },
+    {
+      "path": "backend/app/services",
+      "language": "Python",
+      "type": "service",
+      "entry": "backend/app/services/generator.py",
+      "tests": [
+        "backend/test_scene_usecases_unittest.py",
+        "backend/test_scene_postprocess_unittest.py",
+        "backend/test_scene_image_service.py"
+      ],
+      "interfaces": [
+        "LLMClient - LLM 客户端",
+        "OutlineGenerator - 大纲生成",
+        "SceneGenerator - 场景生成 (SSE)",
+        "RAGService - 向量检索"
+      ],
+      "has_claude_md": true
+    },
+    {
+      "path": "backend/app/rag",
+      "language": "Python",
+      "type": "service",
+      "entry": "backend/app/rag/service.py",
+      "tests": ["backend/test_rag_novel_isolation.py"],
+      "interfaces": [
+        "add_knowledge - 添加向量",
+        "retrieve_context - 检索上下文",
+        "retrieve_all_by_novel - 按小说检索"
+      ],
+      "has_claude_md": true
+    },
+    {
+      "path": "backend/app/agents",
+      "language": "Python",
+      "type": "agent",
+      "entry": "backend/app/agents/editorial_room.py",
+      "tests": [],
+      "interfaces": [
+        "EditorialRoom.review_and_revise - 多智能体审稿"
+      ],
+      "has_claude_md": true
+    },
+    {
+      "path": "frontend/src/views",
+      "language": "Vue",
+      "type": "ui",
+      "entry": "frontend/src/main.js",
+      "tests": [],
+      "interfaces": [
+        "HomePage - 首页",
+        "NovelPage - 小说详情",
+        "WriterPage - 写作界面",
+        "RagPage - RAG 管理",
+        "SettingsPage - 设置页"
+      ],
+      "has_claude_md": true
+    },
+    {
+      "path": "frontend/src/components",
+      "language": "Vue",
+      "type": "ui",
+      "entry": null,
+      "tests": [],
+      "interfaces": [
+        "TiptapEditor - Tiptap 富文本编辑器",
+        "RelationshipGraph - G6 角色关系图"
+      ],
+      "has_claude_md": true
+    }
+  ],
+
+  "coverage": {
+    "total_files_estimated": 60,
+    "files_scanned": 52,
+    "percentage": 86.7,
+    "modules_with_docs": 7,
+    "total_modules": 7,
+    "module_coverage": 100
+  },
+
+  "gaps": [
+    {
+      "module": "backend/app/agents",
+      "issue": "缺少单元测试",
+      "priority": "medium"
+    },
+    {
+      "module": "frontend/src/stores",
+      "issue": "缺少独立文档",
+      "priority": "medium"
+    },
+    {
+      "module": "frontend/src/router",
+      "issue": "缺少路由守卫文档",
+      "priority": "low"
+    }
+  ],
+
+  "ignored_paths": [
+    "backend/venv/**",
+    "backend/__pycache__/**",
+    "backend/*.pyc",
+    "frontend/node_modules/**",
+    "frontend/dist/**",
+    "frontend/chroma_data/**",
+    "backend/chroma_data/**",
+    "*.db",
+    "*.db-wal",
+    "*.db-shm",
+    ".git/**"
+  ],
+
+  "truncated": false,
+
+  "next_steps": [
+    {
+      "path": "backend/app/agents",
+      "action": "添加单元测试文件 test_editorial_room.py"
+    },
+    {
+      "path": "frontend/src/stores",
+      "action": "创建 stores/CLAUDE.md 文档"
+    },
+    {
+      "path": "backend/app/api/scene.py",
+      "action": "补充 SSE 流式响应详细说明"
+    }
+  ]
+}

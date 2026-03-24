@@ -83,6 +83,8 @@ flowchart TD
     style Context fill:#f9f,stroke:#333,stroke-width:2px
 ```
 
+**导出**：在小说详情页点击导出按钮，可下载**全书正文**，格式为 **UTF-8 纯文本 (.txt)**，包含书名、简介及各章节场景内容。
+
 ## 🛠 技术栈
 
 ### Frontend (前端)
@@ -131,6 +133,13 @@ cp .env.example .env
 # 编辑 .env 文件，填入你的 OpenAI 或 MiniMax API Key
 ```
 
+**模型配置说明**（在应用内「设置」页可进一步配置）：
+
+- **Model Name（通用）**：默认用于写作、摘要、审稿等所有 LLM 调用。
+- **写作模型**（可选）：留空则使用通用模型。可用更强模型保证正文质量。
+- **摘要模型**（可选）：留空则使用通用模型。建议使用更小/更便宜的模型以节省成本（摘要任务对能力要求较低）。
+- **审稿模型**（可选）：开启「Review」时的多智能体审稿所用模型，留空则使用通用模型。
+
 ### 3. 前端设置
 
 ```bash
@@ -153,6 +162,39 @@ npm run dev
 uvicorn app.main:app --reload
 ```
 
+## ✅ 测试与 CI
+
+后端测试说明见：`backend/TESTING.md`
+
+在 `backend/` 目录执行：
+
+```bash
+python -m unittest -q \
+  test_scene_image_service.py \
+  test_errors_unittest.py \
+  test_scene_usecases_unittest.py \
+  test_scene_postprocess_unittest.py \
+  test_chapter_usecases_unittest.py \
+  test_novel_usecases_unittest.py \
+  test_api_integration_unittest.py \
+  test_rag_novel_isolation.py \
+  test_scene_sse_and_versions.py
+```
+
+CI 工作流：
+
+- `.github/workflows/backend-ci.yml`
+- 在 `push/pull_request` 且后端相关文件变化时自动运行上述测试。
+
+## 🧱 后端架构现状（重构后）
+
+后端已采用“薄路由 + usecase/service”分层：
+
+- `app/api/`：参数校验、响应组装、调用 usecase。
+- `app/services/*_usecases.py`：业务编排与事务边界。
+- `app/services/scene_postprocess.py`：场景摘要/RAG/状态关系分析后处理。
+- `app/errors.py` + `app/logging.py`：全局异常结构与请求 ID 日志追踪。
+
 ## 📂 项目结构
 
 ```
@@ -161,8 +203,9 @@ StoryWeaver/
 │   ├── 📂 app/
 │   │   ├── 📂 api/            # RESTful API 路由定义
 │   │   ├── 📂 models/         # SQLAlchemy 数据库模型
-│   │   ├── 📂 services/       # 核心业务逻辑 (LLM调用/大纲生成/摘要)
+│   │   ├── 📂 services/       # usecase/service 业务逻辑层
 │   │   └── 📂 rag/            # 向量数据库检索服务
+│   ├── 📄 TESTING.md          # 后端测试与CI说明
 │   ├── 📄 requirements.txt    # Python 依赖
 │   └── 📄 main.py             # 入口文件
 │
@@ -174,8 +217,12 @@ StoryWeaver/
 │   │   └── 📂 api/            # Axios 请求封装
 │   └── 📄 package.json        # Node 依赖
 │
+├── 📂 docs/                    # 文档（数据库设计、改进计划等）
+├── 📂 .github/workflows/       # CI 工作流
 └── 📄 DEV_DOC.md               # 详细开发文档
 ```
+
+改进与路线图见：[docs/IMPROVEMENT_PLAN.md](docs/IMPROVEMENT_PLAN.md)。
 
 ## 🤝 贡献指南
 

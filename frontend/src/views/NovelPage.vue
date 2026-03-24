@@ -5,14 +5,24 @@
       <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50">
         <span class="font-display text-white font-medium tracking-wide">Chapters</span>
         <div class="flex gap-2">
-          <button 
-            @click="handleExport" 
-            :disabled="!currentNovel || exporting"
-            class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-blue transition-colors disabled:opacity-50"
-            title="Export Novel"
-          >
-            <el-icon><Download /></el-icon>
-          </button>
+          <el-tooltip content="导出全书正文为 TXT" placement="bottom">
+            <button 
+              @click="handleExport" 
+              :disabled="!currentNovel || exporting"
+              class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-blue transition-colors disabled:opacity-50"
+            >
+              <el-icon><Download /></el-icon>
+            </button>
+          </el-tooltip>
+          <el-tooltip content="导出设定集（角色+世界观）为 TXT" placement="bottom">
+            <button 
+              @click="handleExportSettings" 
+              :disabled="!currentNovel || exportingSettings"
+              class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-purple transition-colors disabled:opacity-50"
+            >
+              <el-icon><Document /></el-icon>
+            </button>
+          </el-tooltip>
           <button 
             @click="handleGenerateOutline" 
             :disabled="!currentNovel || generatingOutline"
@@ -152,11 +162,13 @@
       <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50">
         <span class="font-display text-white font-medium tracking-wide">Database</span>
         <div class="flex gap-2">
-            <button @click="showGraphDialog = true" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-purple transition-colors" title="Relationship Map">
+            <button @click="showGraphDialog = true" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-neon-purple transition-colors text-xs font-medium" title="关系图谱">
               <el-icon><Share /></el-icon>
+              <span>关系图谱</span>
             </button>
-            <button @click="goToRag" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors" title="RAG Knowledge">
+            <button @click="goToRag" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors text-xs font-medium" title="RAG 知识库">
               <el-icon><Files /></el-icon>
+              <span>知识库</span>
             </button>
         </div>
       </div>
@@ -179,7 +191,27 @@
           <template v-if="activeTab === 'characters'">
             <div v-if="characters.length === 0" class="text-center py-8 text-gray-500 text-sm">No characters found</div>
             <div v-else class="space-y-3">
-              <div v-for="char in characters" :key="char.id" class="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
+              <div v-for="char in characters" :key="char.id" class="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors flex gap-3">
+                <!-- 角色肖像：缩略图或占位 -->
+                <div class="shrink-0 w-16 h-16 rounded-xl overflow-hidden bg-white/5 border border-white/10 flex items-center justify-center relative">
+                  <img
+                    v-if="char.portrait_url"
+                    :src="char.portrait_url"
+                    class="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                    alt="Portrait"
+                    referrerpolicy="no-referrer"
+                    @click="openPortraitPreview(char.portrait_url)"
+                    @error="handlePortraitError($event, char)"
+                  />
+                  <div v-else class="text-gray-500 text-2xl">?</div>
+                  <div
+                    v-if="generatingPortraitId === char.id"
+                    class="absolute inset-0 bg-black/60 flex items-center justify-center"
+                  >
+                    <el-icon class="animate-spin text-white text-xl"><Loading /></el-icon>
+                  </div>
+                </div>
+                <div class="flex-1 min-w-0">
                 <div class="flex justify-between items-start mb-2">
                   <div class="font-medium text-white">{{ char.name }}</div>
                   <div class="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-400">{{ char.role || 'NPC' }}</div>
@@ -223,6 +255,36 @@
                 <div v-else class="mt-2 pt-2 border-t border-white/5 text-[10px] text-gray-600">
                    No Power State
                 </div>
+                <!-- 肖像操作 -->
+                <div class="mt-2 flex gap-2">
+                  <button
+                    v-if="!char.portrait_url"
+                    type="button"
+                    :disabled="generatingPortraitId !== null"
+                    class="px-2 py-1 rounded-lg text-xs bg-neon-purple/10 hover:bg-neon-purple/20 border border-neon-purple/20 text-neon-purple disabled:opacity-50"
+                    @click="handleGeneratePortrait(char)"
+                  >
+                    生成肖像
+                  </button>
+                  <template v-else>
+                    <button
+                      type="button"
+                      class="px-2 py-1 rounded-lg text-xs bg-white/10 hover:bg-white/20 text-gray-300"
+                      @click="openPortraitPreview(char.portrait_url)"
+                    >
+                      查看
+                    </button>
+                    <button
+                      type="button"
+                      :disabled="generatingPortraitId !== null"
+                      class="px-2 py-1 rounded-lg text-xs bg-neon-purple/10 hover:bg-neon-purple/20 border border-neon-purple/20 text-neon-purple disabled:opacity-50"
+                      @click="handleGeneratePortrait(char)"
+                    >
+                      重新生成
+                    </button>
+                  </template>
+                </div>
+                </div>
               </div>
             </div>
           </template>
@@ -263,6 +325,13 @@
           </el-button>
         </div>
       </template>
+    </el-dialog>
+
+    <!-- 角色肖像大图预览 -->
+    <el-dialog v-model="showPortraitDialog" title="角色肖像" width="420px" align-center class="glass-dialog-override" @close="portraitPreviewUrl = null">
+      <div v-if="portraitPreviewUrl" class="rounded-xl overflow-hidden border border-white/10 bg-black/20">
+        <img :src="portraitPreviewUrl" class="w-full h-auto object-contain max-h-[70vh]" alt="Portrait" referrerpolicy="no-referrer" />
+      </div>
     </el-dialog>
 
     <!-- Relationship Graph Dialog -->
@@ -307,8 +376,9 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useNovelStore } from '@/stores/novel'
+import { novelApi, characterApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { Share, Download, Location, Files, Operation, Document, MagicStick, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Share, Download, Location, Files, Operation, Document, MagicStick, ArrowLeft, ArrowRight, Loading } from '@element-plus/icons-vue'
 import RelationshipGraph from '@/components/RelationshipGraph.vue'
 
 const route = useRoute()
@@ -328,13 +398,42 @@ const generatingOutline = ref(false)
 const generatingBeats = ref(false)
 const summarizing = ref(false)
 const exporting = ref(false)
+const exportingSettings = ref(false)
 const showOutlineDialog = ref(false)
 const showGraphDialog = ref(false)
+const showPortraitDialog = ref(false)
+const portraitPreviewUrl = ref(null)
+const generatingPortraitId = ref(null)
 
 const outlineForm = ref({
   premise: '',
   numChapters: 10
 })
+
+function openPortraitPreview(url) {
+  portraitPreviewUrl.value = url
+  showPortraitDialog.value = true
+}
+
+function handlePortraitError(e, char) {
+  e.target.style.display = 'none'
+  if (char && char.portrait_url) char.portrait_url = null
+}
+
+async function handleGeneratePortrait(char) {
+  if (!char?.id || !route.params.id) return
+  generatingPortraitId.value = char.id
+  try {
+    await characterApi.generatePortrait(char.id)
+    await store.loadCharacters(route.params.id)
+    ElMessage.success('肖像已生成')
+  } catch (err) {
+    console.error(err)
+    ElMessage.error(err.response?.data?.detail || '生成失败，请检查 MiniMax API 配置')
+  } finally {
+    generatingPortraitId.value = null
+  }
+}
 
 async function loadData() {
   const novelId = route.params.id
@@ -490,6 +589,29 @@ async function handleExport() {
     ElMessage.error('Export failed')
   } finally {
     exporting.value = false
+  }
+}
+
+async function handleExportSettings() {
+  if (!currentNovel.value) return
+  exportingSettings.value = true
+  try {
+    const { data } = await novelApi.exportSettings(route.params.id)
+    const blob = new Blob([data], { type: 'text/plain;charset=utf-8' })
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `${currentNovel.value.title}_设定集.txt`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('设定集导出成功')
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('导出失败')
+  } finally {
+    exportingSettings.value = false
   }
 }
 

@@ -15,22 +15,35 @@ class LLMConfig(BaseModel):
     openai_api_key: Optional[str] = None
     openai_base_url: Optional[str] = None
     openai_model: Optional[str] = None
+    writing_model: Optional[str] = None
+    summary_model: Optional[str] = None
+    editorial_model: Optional[str] = None
 
-@router.get("/llm", response_model=LLMConfig)
-async def get_llm_config(db: AsyncSession = Depends(get_db)):
-    """获取 LLM 配置"""
-    # 优先从数据库读取
-    stmt = select(SystemConfig).where(SystemConfig.key.in_([
-        "openai_api_key", "openai_base_url", "openai_model"
-    ]))
+_CONFIG_KEYS = [
+    "openai_api_key", "openai_base_url", "openai_model",
+    "writing_model", "summary_model", "editorial_model",
+]
+
+async def get_llm_config_from_db(db: AsyncSession) -> LLMConfig:
+    """从数据库读取 LLM 配置（供其他模块复用）"""
+    stmt = select(SystemConfig).where(SystemConfig.key.in_(_CONFIG_KEYS))
     result = await db.execute(stmt)
     configs = {row.key: row.value for row in result.scalars().all()}
-    
+    base_model = configs.get("openai_model") or env_settings.openai_model
     return LLMConfig(
         openai_api_key=configs.get("openai_api_key") or env_settings.openai_api_key,
         openai_base_url=configs.get("openai_base_url") or env_settings.openai_base_url,
-        openai_model=configs.get("openai_model") or env_settings.openai_model
+        openai_model=base_model,
+        writing_model=configs.get("writing_model") or base_model,
+        summary_model=configs.get("summary_model") or base_model,
+        editorial_model=configs.get("editorial_model") or base_model,
     )
+
+
+@router.get("/llm", response_model=LLMConfig)
+async def get_llm_config(db: AsyncSession = Depends(get_db)):
+    """获取 LLM 配置（写作/摘要/审稿可单独指定模型，留空则用 openai_model）"""
+    return await get_llm_config_from_db(db)
 
 @router.post("/llm")
 async def update_llm_config(config: LLMConfig, db: AsyncSession = Depends(get_db)):
@@ -38,7 +51,10 @@ async def update_llm_config(config: LLMConfig, db: AsyncSession = Depends(get_db
     keys = {
         "openai_api_key": config.openai_api_key,
         "openai_base_url": config.openai_base_url,
-        "openai_model": config.openai_model
+        "openai_model": config.openai_model,
+        "writing_model": config.writing_model,
+        "summary_model": config.summary_model,
+        "editorial_model": config.editorial_model,
     }
     
     for key, value in keys.items():

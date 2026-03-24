@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models import Chapter, Novel, Scene
 from app.services import outline_generator, scene_generator
+from app.services.chapter_usecases import summarize_chapter_content
 
 from pydantic import BaseModel
 
@@ -221,65 +222,7 @@ async def generate_chapter_summary(
     """
     根据章节下的所有场景生成章节摘要，并更新到数据库
     """
-    # 1. 验证章节存在
-    result = await db.execute(select(Chapter).where(Chapter.id == chapter_id))
-    chapter = result.scalar_one_or_none()
-    if not chapter:
-        raise HTTPException(status_code=404, detail="Chapter not found")
-
-    # 2. 获取所有场景
-    result = await db.execute(
-        select(Scene).where(Scene.chapter_id == chapter_id).order_by(Scene.order_index)
-    )
-    scenes = result.scalars().all()
-    
-    if not scenes:
-        raise HTTPException(status_code=400, detail="Chapter has no scenes")
-
-    # 3. 收集场景内容
-    scene_texts = []
-    for scene in scenes:
-        text = ""
-        if scene.summary:
-            text = f"场景{scene.order_index}摘要：{scene.summary}"
-        elif scene.content:
-            # 如果有正文但没有摘要，取前500字
-            text = f"场景{scene.order_index}正文片段：{scene.content[:500]}..." 
-        elif scene.beat_description:
-            text = f"场景{scene.order_index}细纲：{scene.beat_description}"
-        
-        if text:
-            scene_texts.append(text)
-            
-    if not scene_texts:
-         raise HTTPException(status_code=400, detail="Scenes have no content to summarize")
-         
-    combined_text = "\n\n".join(scene_texts)
-    
-    # 4. 调用 LLM 生成摘要
-    prompt = f"""请根据以下章节内的场景信息，生成该章节的完整摘要（300-500字）。
-    
-章节标题：{chapter.title}
-
-{combined_text}
-
-请输出摘要内容（不要包含思考过程）："""
-
-    try:
-        summary = await scene_generator.llm.generate(prompt)
-        
-        # 清理
-        summary = re.sub(r'<think>.*?</think>', '', summary, flags=re.DOTALL)
-        summary = summary.strip()
-        
-        # 5. 更新章节
-        chapter.summary = summary
-        await db.commit()
-        
-        return {"id": chapter.id, "summary": summary}
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return await summarize_chapter_content(chapter_id, db)
 
 
 

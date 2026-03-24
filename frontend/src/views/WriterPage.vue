@@ -1,7 +1,23 @@
 <template>
   <div class="h-full p-4 grid grid-cols-12 gap-4">
-    <!-- Left: Context -->
-    <div class="col-span-3 flex flex-col glass-panel rounded-2xl overflow-hidden">
+    <!-- 窄屏：侧边栏开关 -->
+    <div class="md:hidden fixed top-20 left-4 z-20 flex gap-2">
+      <button
+        @click="drawerContext = true"
+        class="p-2 rounded-lg bg-space-900/90 border border-white/10 text-gray-400 hover:text-neon-blue"
+      >
+        <el-icon><Document /></el-icon>
+      </button>
+      <button
+        @click="drawerAssistant = true"
+        class="p-2 rounded-lg bg-space-900/90 border border-white/10 text-gray-400 hover:text-neon-pink"
+      >
+        <el-icon><ChatDotRound /></el-icon>
+      </button>
+    </div>
+
+    <!-- Left: Context (桌面显示，窄屏隐藏由抽屉替代) -->
+    <div class="hidden md:flex col-span-3 flex-col glass-panel rounded-2xl overflow-hidden">
       <div class="p-4 border-b border-white/5 bg-space-900/50 backdrop-blur-xl">
         <h3 class="font-display text-white font-medium tracking-wide flex items-center gap-2">
           <el-icon class="text-neon-blue"><Document /></el-icon>
@@ -32,8 +48,8 @@
       </div>
     </div>
 
-    <!-- Center: Editor -->
-    <div class="col-span-6 flex flex-col glass-panel rounded-2xl overflow-hidden relative">
+    <!-- Center: Editor (窄屏全宽) -->
+    <div class="col-span-12 md:col-span-6 flex flex-col glass-panel rounded-2xl overflow-hidden relative">
       <div class="p-4 border-b border-white/5 flex justify-between items-center bg-space-900/50 backdrop-blur-xl z-10">
         <div class="flex items-center gap-3">
           <button @click="goBack" class="p-1.5 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors">
@@ -58,7 +74,7 @@
           </button>
           
           <!-- Editorial Toggle -->
-          <el-tooltip content="Toggle Editorial Committee Review" placement="bottom">
+          <el-tooltip content="开启后生成更慢，但会进行逻辑/爽点/思想审查并给出修改建议" placement="bottom">
              <button
                 @click="enableEditorial = !enableEditorial"
                 class="px-2 py-1.5 rounded-lg border transition-colors flex items-center gap-1"
@@ -76,11 +92,18 @@
           >
             Save
           </button>
+          <button 
+            @click="openVersionsDialog"
+            :disabled="!currentScene"
+            class="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-xs font-medium text-gray-400 hover:text-gray-300 transition-colors disabled:opacity-50"
+          >
+            历史版本
+          </button>
           
           <button 
-            v-if="editorialLogs.length > 0"
             @click="showLogs = true"
-            class="px-3 py-1.5 rounded-lg bg-neon-blue/10 hover:bg-neon-blue/20 border border-neon-blue/20 text-xs font-medium text-neon-blue transition-colors flex items-center gap-1"
+            class="px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1"
+            :class="editorialLogs.length > 0 ? 'bg-neon-blue/10 hover:bg-neon-blue/20 border-neon-blue/20 text-neon-blue' : 'bg-white/5 hover:bg-white/10 border-white/5 text-gray-400 hover:text-gray-300'"
           >
             <el-icon><DataAnalysis /></el-icon>
             Logs
@@ -125,11 +148,10 @@
       </div>
     </div>
 
-    <!-- Right: Assistant -->
-    <div class="col-span-3 flex flex-col gap-4 h-full">
-      <!-- Top: Storyboard Image -->
-      <div class="h-1/3 min-h-[200px] flex flex-col glass-panel rounded-2xl overflow-hidden relative group">
-        <!-- Carousel for multiple images -->
+    <!-- Right: Assistant (桌面显示，窄屏隐藏由抽屉替代) -->
+    <div class="hidden md:flex col-span-3 flex-col gap-3 h-full min-h-0">
+      <!-- 分镜图：独立一块 -->
+      <div class="shrink-0 h-[200px] flex flex-col glass-panel rounded-2xl overflow-hidden relative group">
         <div v-if="currentScene?.image_prompts && currentScene.image_prompts.length > 0" class="absolute inset-0">
              <el-carousel 
                 :interval="5000" 
@@ -152,8 +174,6 @@
                     </div>
                 </el-carousel-item>
              </el-carousel>
-             
-             <!-- Overlay Controls -->
              <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
                  <div class="pointer-events-auto flex gap-2">
                     <button 
@@ -164,53 +184,108 @@
                       <el-icon :class="{ 'animate-spin': generatingImage }"><Refresh /></el-icon>
                       Regenerate
                     </button>
+                    <button 
+                      @click="handleGenerateVideo"
+                      :disabled="generatingVideo || generatingImage"
+                      class="px-4 py-2 rounded-xl bg-neon-green/20 hover:bg-neon-green/30 backdrop-blur border border-neon-green/30 text-white text-sm font-medium transition-colors flex items-center gap-2"
+                    >
+                      <el-icon :class="{ 'animate-spin': generatingVideo }"><VideoPlay /></el-icon>
+                      {{ generatingVideo ? '生成中…' : '生成视频' }}
+                    </button>
                  </div>
              </div>
-             
-             <!-- Prompt Overlay (Bottom) -->
              <div class="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/90 to-transparent pointer-events-none">
                  <p class="text-[10px] text-gray-300 line-clamp-2 leading-tight opacity-80">
                      {{ currentImagePrompt }}
                  </p>
              </div>
         </div>
-        
-        <!-- Empty State -->
-        <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-500 gap-3 p-6 text-center">
-            <el-icon class="text-4xl opacity-20"><Picture /></el-icon>
+        <div v-else class="flex-1 flex flex-col items-center justify-center text-gray-500 gap-3 p-4 text-center">
+            <el-icon class="text-3xl opacity-20"><Picture /></el-icon>
             <p class="text-xs">No storyboard yet</p>
             <button 
               @click="handleGenerateImage"
               :disabled="generatingImage"
-              class="px-4 py-2 rounded-xl bg-neon-purple/10 hover:bg-neon-purple/20 border border-neon-purple/20 text-neon-purple text-xs font-medium transition-colors flex items-center gap-2"
+              class="px-3 py-1.5 rounded-lg text-xs bg-neon-purple/10 hover:bg-neon-purple/20 border border-neon-purple/20 text-neon-purple transition-colors flex items-center gap-1"
             >
               <el-icon :class="{ 'animate-spin': generatingImage }"><MagicStick /></el-icon>
               Generate Storyboard
             </button>
         </div>
-        
-        <!-- Header Overlay -->
-        <div class="absolute top-0 left-0 right-0 p-3 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10">
-             <h3 class="font-display text-white text-xs font-medium tracking-wide flex items-center gap-2 opacity-80">
+        <div class="absolute top-0 left-0 right-0 p-2 bg-gradient-to-b from-black/60 to-transparent pointer-events-none z-10">
+             <h3 class="font-display text-white text-xs font-medium tracking-wide flex items-center gap-1.5 opacity-80">
               <el-icon class="text-neon-green"><Picture /></el-icon>
               Storyboard
-            </h3>
+             </h3>
         </div>
       </div>
 
-      <!-- Bottom: Assistant -->
+      <!-- 分镜视频：单独一块，在分镜图下方；展示提示词并支持修改后重新生成 -->
+      <div v-if="currentScene && (currentScene.video_url || currentScene.video_prompt || generatingVideo)" class="shrink-0 glass-panel rounded-2xl overflow-hidden border border-white/10">
+        <div class="px-3 py-2 border-b border-white/5 flex items-center gap-2">
+          <el-icon class="text-neon-green"><VideoPlay /></el-icon>
+          <span class="text-xs font-medium text-white">分镜视频</span>
+        </div>
+        <div class="p-3 space-y-3">
+          <div v-if="generatingVideo" class="flex items-center gap-2 text-neon-green text-xs py-2">
+            <el-icon class="animate-spin"><Loading /></el-icon>
+            <span>生成中（约 1–2 分钟），请勿离开…</span>
+          </div>
+          <div v-else-if="currentScene.video_url" class="rounded-lg overflow-hidden bg-black/50">
+            <video
+              :src="currentScene.video_url"
+              controls
+              class="w-full max-h-40 object-contain"
+              preload="metadata"
+            />
+          </div>
+          <!-- 提示词展示与编辑 -->
+          <div class="space-y-1.5">
+            <label class="text-[10px] text-gray-500 uppercase tracking-wider font-medium">视频提示词</label>
+            <textarea
+              v-model="videoPromptEdit"
+              class="w-full min-h-[60px] px-2.5 py-2 rounded-lg text-xs bg-white/5 border border-white/10 text-gray-300 placeholder-gray-500 focus:border-neon-green/30 focus:outline-none resize-y"
+              placeholder="用于描述视频动作与画面，留空则首次生成时由系统自动生成"
+              rows="2"
+            />
+            <button
+              type="button"
+              :disabled="generatingVideo"
+              class="w-full py-1.5 rounded-lg text-xs font-medium bg-neon-green/10 hover:bg-neon-green/20 border border-neon-green/20 text-neon-green disabled:opacity-50 transition-colors"
+              @click="handleGenerateVideo()"
+            >
+              {{ generatingVideo ? '生成中…' : (currentScene.video_url ? '使用此提示词重新生成' : '生成视频') }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Assistant -->
       <div class="flex-1 flex flex-col glass-panel rounded-2xl overflow-hidden">
         <div class="p-4 border-b border-white/5 bg-space-900/50 backdrop-blur-xl">
           <h3 class="font-display text-white font-medium tracking-wide flex items-center gap-2">
             <el-icon class="text-neon-pink"><ChatDotRound /></el-icon>
             AI Assistant
           </h3>
+          <p class="text-[11px] text-gray-500 mt-1.5">可让 AI 润色、扩写或检查与设定的矛盾</p>
         </div>
 
         <div class="flex-1 flex flex-col overflow-hidden relative">
           <div class="flex-1 overflow-y-auto p-4 custom-scrollbar space-y-4" ref="chatContainer">
-          <div v-if="chatMessages.length === 0" class="text-center py-8 text-gray-500 text-xs">
-            Ask me to refine text, suggest ideas, or check consistency.
+          <div v-if="chatMessages.length === 0" class="space-y-4">
+            <div class="text-center py-4 text-gray-500 text-xs">
+              Ask me to refine text, suggest ideas, or check consistency.
+            </div>
+            <div class="flex flex-wrap gap-2 justify-center">
+              <button
+                v-for="phrase in presetPhrases"
+                :key="phrase"
+                @click="chatInput = phrase"
+                class="px-3 py-1.5 rounded-lg text-xs bg-white/5 hover:bg-neon-blue/10 border border-white/10 hover:border-neon-blue/20 text-gray-400 hover:text-neon-blue transition-colors"
+              >
+                {{ phrase }}
+              </button>
+            </div>
           </div>
           
           <div
@@ -281,8 +356,30 @@
             <span class="whitespace-pre-wrap">{{ log }}</span>
           </div>
         </div>
-        <div v-if="editorialLogs.length === 0" class="text-center text-gray-500 py-8">
-          No logs available yet.
+        <div v-if="editorialLogs.length === 0" class="text-center text-gray-500 py-8 text-sm">
+          开启 Review 并生成后将在此显示审稿日志。
+        </div>
+      </div>
+    </el-dialog>
+
+    <!-- 历史版本 Dialog -->
+    <el-dialog v-model="showVersionsDialog" title="历史版本" width="560px" class="glass-dialog" @open="loadVersions">
+      <div v-if="loadingVersions" class="text-center py-8 text-gray-500 text-sm">加载中...</div>
+      <div v-else-if="sceneVersions.length === 0" class="text-center py-8 text-gray-500 text-sm">暂无历史版本，保存正文后会在此显示。</div>
+      <div v-else class="space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar">
+        <div
+          v-for="v in sceneVersions"
+          :key="v.id"
+          class="p-3 rounded-xl bg-white/5 border border-white/5 hover:border-white/10 flex flex-col gap-2"
+        >
+          <div class="text-[10px] text-gray-500">{{ v.created_at }}</div>
+          <div class="text-sm text-gray-300 line-clamp-2">{{ v.content_preview || v.content?.slice(0, 200) }}...</div>
+          <button
+            @click="handleRestoreVersion(v.id)"
+            class="self-end px-2 py-1 rounded-lg text-xs bg-neon-blue/10 hover:bg-neon-blue/20 text-neon-blue border border-neon-blue/20"
+          >
+            恢复此版本
+          </button>
         </div>
       </div>
     </el-dialog>
@@ -331,6 +428,48 @@
           </el-carousel>
       </div>
     </el-dialog>
+
+    <!-- 窄屏抽屉：Context -->
+    <el-drawer v-model="drawerContext" title="Context" direction="ltr" size="85%" class="!bg-space-900">
+      <div class="p-4 space-y-6">
+        <div class="space-y-2">
+          <h4 class="text-xs uppercase tracking-wider text-gray-500 font-bold">Previous Summary</h4>
+          <div class="text-sm text-gray-300 leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
+            {{ prevSummary || 'No summary available' }}
+          </div>
+        </div>
+        <div class="space-y-2">
+          <h4 class="text-xs uppercase tracking-wider text-gray-500 font-bold">Scene Directives</h4>
+          <div class="bg-white/5 p-3 rounded-xl border border-white/5 space-y-3">
+            <div class="flex items-center gap-2 text-neon-blue text-sm font-medium">
+              <el-icon><Location /></el-icon>
+              <span>{{ currentScene?.location || 'Unspecified Location' }}</span>
+            </div>
+            <div class="text-sm text-gray-300 leading-relaxed">
+              {{ currentScene?.beat_description || 'No directives' }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </el-drawer>
+
+    <!-- 窄屏抽屉：Assistant -->
+    <el-drawer v-model="drawerAssistant" title="AI Assistant" direction="rtl" size="85%" class="!bg-space-900">
+      <div class="p-4 flex flex-col gap-4 h-full overflow-hidden">
+        <div v-if="currentScene?.image_prompts?.length" class="rounded-xl overflow-hidden border border-white/10 shrink-0">
+          <img :src="currentScene.image_prompts[0]?.url" class="w-full object-cover max-h-40" alt="Storyboard" />
+        </div>
+        <div class="flex-1 overflow-y-auto space-y-3 custom-scrollbar">
+          <div v-for="(msg, i) in chatMessages" :key="i" class="text-sm" :class="msg.role === 'user' ? 'text-right' : 'text-left'">
+            <span :class="msg.role === 'user' ? 'bg-neon-blue/20' : 'bg-white/5'" class="inline-block px-3 py-2 rounded-lg">{{ msg.content }}</span>
+          </div>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <el-input v-model="chatInput" placeholder="输入问题…" @keyup.enter="handleSendChat" size="small" class="flex-1" />
+          <el-button type="primary" size="small" @click="handleSendChat">发送</el-button>
+        </div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
@@ -367,11 +506,11 @@
 </style>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { sceneApi } from '@/api'
 import { ElMessage } from 'element-plus'
-import { Location, MagicStick, ArrowLeft, Document, ChatDotRound, Position, Loading, DataAnalysis, Picture, Refresh } from '@element-plus/icons-vue'
+import { Location, MagicStick, ArrowLeft, Document, ChatDotRound, Position, Loading, DataAnalysis, Picture, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import TiptapEditor from '@/components/TiptapEditor.vue'
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
@@ -383,14 +522,22 @@ const content = ref('')
 const prevSummary = ref('')
 const generating = ref(false)
 const generatingImage = ref(false)
+const generatingVideo = ref(false)
+const videoPromptEdit = ref('')
+let videoPollTimer = null
 const saving = ref(false)
 const systemStatus = ref('')
 const showLogs = ref(false)
+const showVersionsDialog = ref(false)
+const sceneVersions = ref([])
+const loadingVersions = ref(false)
+const drawerContext = ref(false)
+const drawerAssistant = ref(false)
 const showImagePreview = ref(false)
 const previewImage = ref(null)
 const currentImageIndex = ref(0)
 const editorialLogs = ref([])
-const enableEditorial = ref(true) // 默认开启审稿
+const enableEditorial = ref(false) // 默认关闭，优先生成速度；开启则走审稿委员会
 
 const currentImagePrompt = computed(() => {
   if (!currentScene.value?.image_prompts?.length) return ''
@@ -400,6 +547,13 @@ const currentImagePrompt = computed(() => {
 const chatMessages = ref([])
 const chatInput = ref('')
 const chatContainer = ref(null)
+const presetPhrases = [
+  '把这段改得更悲伤一点',
+  '在这里加一段环境描写',
+  '检查这段与角色设定是否有矛盾',
+  '让对话更口语化',
+  '缩短这段，保留关键信息',
+]
 
 function goBack() {
   router.back()
@@ -417,6 +571,39 @@ function handleCarouselChange(index) {
 }
 
 const previewCarousel = ref(null)
+
+function openVersionsDialog() {
+  showVersionsDialog.value = true
+}
+
+async function loadVersions() {
+  if (!currentScene.value) return
+  loadingVersions.value = true
+  sceneVersions.value = []
+  try {
+    const { data } = await sceneApi.getVersions(currentScene.value.id)
+    sceneVersions.value = data || []
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('加载历史版本失败')
+  } finally {
+    loadingVersions.value = false
+  }
+}
+
+async function handleRestoreVersion(versionId) {
+  if (!currentScene.value) return
+  try {
+    const { data } = await sceneApi.restoreVersion(currentScene.value.id, versionId)
+    content.value = data.content || ''
+    currentScene.value = { ...currentScene.value, content: data.content }
+    showVersionsDialog.value = false
+    ElMessage.success('已恢复为该版本')
+  } catch (e) {
+    console.error(e)
+    ElMessage.error('恢复失败')
+  }
+}
 
 function openImagePreview(item) {
   previewImage.value = item
@@ -456,6 +643,52 @@ async function handleGenerateImage() {
   }
 }
 
+async function handleGenerateVideo() {
+  if (!currentScene.value?.id) return
+  generatingVideo.value = true
+  const payload = videoPromptEdit.value?.trim() ? { prompt: videoPromptEdit.value.trim() } : {}
+  try {
+    await sceneApi.generateVideo(currentScene.value.id, payload)
+    ElMessage.success('视频任务已提交，正在生成…')
+    const poll = async () => {
+      if (!currentScene.value?.id) return
+      try {
+        const { data } = await sceneApi.getVideoStatus(currentScene.value.id)
+        if (data.status === 'Success') {
+          if (videoPollTimer) clearInterval(videoPollTimer)
+          videoPollTimer = null
+          generatingVideo.value = false
+          const { data: sceneData } = await sceneApi.get(currentScene.value.id)
+          currentScene.value = { ...currentScene.value, ...sceneData }
+          videoPromptEdit.value = sceneData.video_prompt || ''
+          ElMessage.success('视频生成完成')
+          return
+        }
+        if (data.status === 'Fail') {
+          if (videoPollTimer) clearInterval(videoPollTimer)
+          videoPollTimer = null
+          generatingVideo.value = false
+          ElMessage.error('视频生成失败，请稍后重试')
+          return
+        }
+      } catch (e) {
+        console.error('Video status poll error', e)
+      }
+    }
+    await poll()
+    videoPollTimer = setInterval(poll, 10000)
+  } catch (err) {
+    generatingVideo.value = false
+    console.error(err)
+    const msg = err.response?.data?.detail || err.message || '提交失败'
+    ElMessage.error(Array.isArray(msg) ? msg[0] : msg)
+  }
+}
+
+onUnmounted(() => {
+  if (videoPollTimer) clearInterval(videoPollTimer)
+})
+
 async function loadScene() {
   const sceneId = route.params.sceneId
   try {
@@ -463,7 +696,8 @@ async function loadScene() {
     currentScene.value = data
     content.value = data.content || ''
     prevSummary.value = data.context_summary || 'No context summary available'
-    
+    videoPromptEdit.value = data.video_prompt || ''
+
     // Legacy support for image_url -> image_prompts
     if (data.image_url && (!data.image_prompts || data.image_prompts.length === 0)) {
         currentScene.value.image_prompts = [{ url: data.image_url, prompt: 'Generated image' }]
@@ -497,29 +731,26 @@ async function handleGenerate() {
       } else if (data.system) {
         systemStatus.value = data.system
       } else if (data.log) {
-        editorialLogs.value.push(data.log)
-        // Auto-show logs if not already shown? Maybe better to just show a notification or update counter
-        // Let's just update the array for now.
+        editorialLogs.value = [...editorialLogs.value, data.log]
       } else if (data.done) {
         eventSource.close()
         generating.value = false
         systemStatus.value = ''
         ElMessage.success('Generation complete')
         handleSave()
-        
         if (editorialLogs.value.length > 0) {
-           ElMessage.info({
-             message: 'View editorial logs',
-             type: 'info',
-             showClose: true,
-             onClick: () => { showLogs.value = true }
-           })
+          showLogs.value = true
         }
       } else if (data.error) {
         eventSource.close()
         generating.value = false
         systemStatus.value = ''
-        ElMessage.error(data.error)
+        ElMessage({
+          type: 'error',
+          message: `生成失败：${data.error}。请检查网络或 API 配置后点击「AI Continue」重试。`,
+          duration: 6000,
+          showClose: true
+        })
       }
     }
 
@@ -527,12 +758,22 @@ async function handleGenerate() {
       eventSource.close()
       generating.value = false
       systemStatus.value = ''
-      ElMessage.error('Generation interrupted')
+      ElMessage({
+        type: 'error',
+        message: '生成中断（网络或服务异常）。请检查后点击「AI Continue」重试。',
+        duration: 6000,
+        showClose: true
+      })
     }
   } catch (error) {
     generating.value = false
     systemStatus.value = ''
-    ElMessage.error('Generation failed')
+    ElMessage({
+      type: 'error',
+      message: '生成失败，请检查网络或 API 配置后点击「AI Continue」重试。',
+      duration: 6000,
+      showClose: true
+    })
   }
 }
 
@@ -546,7 +787,12 @@ async function handleSave() {
     })
     ElMessage.success('Saved')
   } catch (error) {
-    ElMessage.error('Save failed')
+    ElMessage({
+      type: 'error',
+      message: '保存失败，请检查网络后重试。',
+      duration: 5000,
+      showClose: true
+    })
   } finally {
     saving.value = false
   }
@@ -564,7 +810,12 @@ async function handleApprove() {
     ElMessage.success('Scene approved')
     router.back()
   } catch (error) {
-    ElMessage.error('Operation failed')
+    ElMessage({
+      type: 'error',
+      message: '操作失败，请检查网络后重试。',
+      duration: 5000,
+      showClose: true
+    })
   }
 }
 

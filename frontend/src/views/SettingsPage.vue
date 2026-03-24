@@ -32,10 +32,20 @@
                     </el-select>
                   </el-form-item>
                   
-                  <el-form-item label="Model Name">
+                  <el-form-item label="Model Name（通用）">
                     <el-input v-model="form.openai_model" placeholder="e.g. gpt-4, deepseek-chat" />
                   </el-form-item>
                 </div>
+
+                <el-form-item label="写作模型（可选，留空用通用）">
+                  <el-input v-model="form.writing_model" placeholder="留空则使用上方 Model Name" />
+                </el-form-item>
+                <el-form-item label="摘要模型（可选，可用小模型节省成本）">
+                  <el-input v-model="form.summary_model" placeholder="留空则使用通用模型" />
+                </el-form-item>
+                <el-form-item label="审稿模型（可选，开启 Review 时使用）">
+                  <el-input v-model="form.editorial_model" placeholder="留空则使用通用模型" />
+                </el-form-item>
 
                 <el-form-item label="Base URL">
                   <el-input v-model="form.openai_base_url" placeholder="https://api.openai.com/v1" />
@@ -96,7 +106,10 @@ const provider = ref('custom')
 const form = ref({
   openai_api_key: '',
   openai_base_url: '',
-  openai_model: ''
+  openai_model: '',
+  writing_model: '',
+  summary_model: '',
+  editorial_model: ''
 })
 
 // 预设配置

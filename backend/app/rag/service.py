@@ -9,9 +9,9 @@ from app.config import settings
 class RAGService:
     """RAG 服务类 - 管理向量数据库"""
 
-    def __init__(self):
-        """初始化 ChromaDB 客户端"""
-        persist_dir = settings.chromadb_persist_directory
+    def __init__(self, persist_directory: Optional[str] = None):
+        """初始化 ChromaDB 客户端；persist_directory 为空时使用配置中的目录（测试可传入临时目录）。"""
+        persist_dir = persist_directory or settings.chromadb_persist_directory
         os.makedirs(persist_dir, exist_ok=True)
 
         self.client = chromadb.PersistentClient(path=persist_dir)
@@ -68,25 +68,28 @@ class RAGService:
         self,
         query: str,
         type: str,
-        top_k: int = 3
+        top_k: int = 3,
+        novel_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        根据查询检索相关上下文
+        根据查询检索相关上下文；传入 novel_id 时仅返回该小说的知识，避免跨书混用。
 
         Args:
             query: 查询文本
             type: 要检索的类型 (character/lore/summary)
             top_k: 返回结果数量
+            novel_id: 可选，小说 ID，检索时按此过滤 metadata
 
         Returns:
             检索结果列表
         """
         collection = self._get_collection(type)
 
-        results = collection.query(
-            query_texts=[query],
-            n_results=top_k
-        )
+        kwargs = {"query_texts": [query], "n_results": top_k}
+        if novel_id:
+            kwargs["where"] = {"novel_id": novel_id}
+
+        results = collection.query(**kwargs)
 
         return self._format_results(results)
 

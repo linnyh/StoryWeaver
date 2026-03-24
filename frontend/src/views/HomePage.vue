@@ -16,9 +16,9 @@
             <el-icon class="text-lg group-hover:rotate-90 transition-transform duration-300"><Plus /></el-icon>
             <span>Create New Novel</span>
           </button>
-          <button class="btn-ghost flex items-center gap-2">
+          <button @click="showHelpDialog = true" class="btn-ghost flex items-center gap-2">
             <el-icon><Document /></el-icon>
-            <span>Documentation</span>
+            <span>帮助</span>
           </button>
         </div>
       </div>
@@ -26,15 +26,15 @@
       <!-- Stats -->
       <div class="mt-12 grid grid-cols-3 gap-8 border-t border-white/5 pt-8">
         <div>
-          <div class="text-3xl font-bold text-white mb-1">{{ novels.length }}</div>
+          <div class="text-3xl font-bold text-white mb-1">{{ stats.novels_count }}</div>
           <div class="text-sm text-gray-500 uppercase tracking-wider font-medium">Novels</div>
         </div>
         <div>
-          <div class="text-3xl font-bold text-white mb-1">12</div>
+          <div class="text-3xl font-bold text-white mb-1">{{ stats.chapters_count }}</div>
           <div class="text-sm text-gray-500 uppercase tracking-wider font-medium">Chapters</div>
         </div>
         <div>
-          <div class="text-3xl font-bold text-white mb-1">24k</div>
+          <div class="text-3xl font-bold text-white mb-1">{{ formatWords(stats.words_count) }}</div>
           <div class="text-sm text-gray-500 uppercase tracking-wider font-medium">Words</div>
         </div>
       </div>
@@ -208,6 +208,16 @@
         </div>
       </template>
     </el-dialog>
+
+    <!-- 帮助 -->
+    <el-dialog v-model="showHelpDialog" title="帮助" width="420px">
+      <p class="text-gray-300 text-sm leading-relaxed">
+        使用说明请查看项目根目录的 <strong>README.md</strong> 与 <strong>DEV_DOC.md</strong>。
+      </p>
+      <template #footer>
+        <el-button type="primary" @click="showHelpDialog = false">确定</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -223,9 +233,11 @@ const router = useRouter()
 const novels = ref([])
 const loading = ref(true)
 const showCreateDialog = ref(false)
+const showHelpDialog = ref(false)
 const creating = ref(false)
 const isSelectionMode = ref(false)
 const selectedNovels = ref([])
+const stats = ref({ novels_count: 0, chapters_count: 0, words_count: 0 })
 
 const newNovel = ref({
   title: '',
@@ -234,13 +246,20 @@ const newNovel = ref({
   tone: ''
 })
 
+function formatWords(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n / 1000).toFixed(0) + 'k'
+  return String(n)
+}
+
 async function loadNovels() {
   loading.value = true
   try {
-    const { data } = await novelApi.list()
-    novels.value = data
+    const [listRes, statsRes] = await Promise.all([novelApi.list(), novelApi.getStats()])
+    novels.value = listRes.data
+    stats.value = statsRes.data
   } catch (error) {
-    ElMessage.error('加载小说列表失败')
+    ElMessage.error('加载失败')
   } finally {
     loading.value = false
   }
