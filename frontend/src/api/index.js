@@ -17,7 +17,8 @@ export const novelApi = {
   getRagSummaries: (id) => api.get(`/novels/${id}/rag/summaries`),
   updateRagSummary: (novelId, docId, data) => api.put(`/novels/${novelId}/rag/summaries/${docId}`, data),
   deleteRagSummary: (novelId, docId) => api.delete(`/novels/${novelId}/rag/summaries/${docId}`),
-  export: (id) => api.get(`/novels/${id}/export`, { responseType: 'blob' })
+  export: (id) => api.get(`/novels/${id}/export`, { responseType: 'blob' }),
+  exportSettings: (id) => api.get(`/novels/${id}/export_settings`, { responseType: 'blob' })
 }
 
 // 章节 API
@@ -41,7 +42,11 @@ export const sceneApi = {
   generate: (id) => new EventSource(`/api/scenes/${id}/generate`),
   generateImage: (id) => api.post(`/scenes/${id}/generate_image`),
   summarize: (id) => api.post(`/scenes/${id}/summarize`),
-  chat: (id, message) => api.post(`/scenes/${id}/chat`, { message }, { responseType: 'stream' }) // Use stream or handle SSE manually if needed, but for simple POST usually we use fetch for SSE
+  chat: (id, message) => api.post(`/scenes/${id}/chat`, { message }, { responseType: 'stream' }),
+  getVersions: (sceneId) => api.get(`/scenes/${sceneId}/versions`),
+  restoreVersion: (sceneId, versionId) => api.post(`/scenes/${sceneId}/restore_version`, { version_id: versionId }),
+  generateVideo: (sceneId, data) => api.post(`/scenes/${sceneId}/generate_video`, data || {}),
+  getVideoStatus: (sceneId) => api.get(`/scenes/${sceneId}/video_status`)
 }
 
 // 角色 API
@@ -50,7 +55,8 @@ export const characterApi = {
   list: (novelId) => api.get('/characters/', { params: { novel_id: novelId } }),
   get: (id) => api.get(`/characters/${id}`),
   update: (id, data) => api.put(`/characters/${id}`, data),
-  delete: (id) => api.delete(`/characters/${id}`)
+  delete: (id) => api.delete(`/characters/${id}`),
+  generatePortrait: (id) => api.post(`/characters/${id}/generate_portrait`)
 }
 
 // 世界观 API
