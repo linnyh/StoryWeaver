@@ -21,6 +21,9 @@ class Scene(Base):
     emotional_target = Column(String(255), nullable=True)  # 情绪传达目标
     image_url = Column(String(500), nullable=True)  # 场景分镜配图
     image_prompts = Column(JSON, nullable=True)  # 场景分镜配图及Prompt列表 [{'url': '', 'prompt': ''}, ...]
+    video_task_id = Column(String(128), nullable=True)  # MiniMax 视频生成任务 ID（轮询用）
+    video_url = Column(String(512), nullable=True)  # 生成完成后的视频播放/下载地址
+    video_prompt = Column(Text, nullable=True)  # 生成该视频时使用的提示词，可编辑后重新生成
 
     def __repr__(self):
         return f"<Scene {self.id} - {self.location}>"

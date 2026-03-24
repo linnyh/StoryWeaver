@@ -14,6 +14,7 @@ logger = get_logger(__name__)
 
 MINIMAX_IMAGE_API_URL = "https://api.minimaxi.com/v1/image_generation"
 DEFAULT_STYLE_PROMPT = "Cinematic lighting, detailed, photorealistic, 8k resolution, movie still."
+PORTRAIT_STYLE = "Character portrait, head and shoulders, detailed face, cinematic lighting, high quality, 8k."
 
 
 def _build_storyboard_prompt(scene_text: str) -> str:
@@ -92,6 +93,7 @@ async def _generate_single_image(
     session: aiohttp.ClientSession,
     semaphore: asyncio.Semaphore,
     prompt_text: str,
+    subject_reference_url: Optional[str] = None,
 ) -> Optional[dict[str, str]]:
     async with semaphore:
         payload = {
@@ -102,6 +104,10 @@ async def _generate_single_image(
             "n": 1,
             "prompt_optimizer": True,
         }
+        if subject_reference_url and subject_reference_url.strip():
+            payload["subject_reference"] = [
+                {"type": "character", "image_file": subject_reference_url.strip()}
+            ]
         headers = {
             "Authorization": f"Bearer {settings.minimax_api_key}",
             "Content-Type": "application/json",
@@ -132,8 +138,12 @@ async def generate_scene_images(
     scene_location: Optional[str],
     scene_content: Optional[str],
     scene_beat_description: Optional[str],
+    subject_reference_url: Optional[str] = None,
 ) -> list[dict[str, str]]:
-    """Generate storyboard images from scene data."""
+    """
+    生成分镜图。若传入 subject_reference_url（角色肖像 URL），
+    则使用 MiniMax 主体参考，使图中人物与肖像一致。
+    """
     prompts = await _generate_storyboard_prompts(
         scene_location=scene_location,
         scene_content=scene_content,
@@ -142,7 +152,61 @@ async def generate_scene_images(
 
     semaphore = asyncio.Semaphore(5)
     async with aiohttp.ClientSession() as session:
-        tasks = [_generate_single_image(session, semaphore, prompt) for prompt in prompts]
+        tasks = [
+            _generate_single_image(session, semaphore, p, subject_reference_url)
+            for p in prompts
+        ]
         results = await asyncio.gather(*tasks)
 
     return [result for result in results if result is not None]
+
+
+def _build_character_portrait_prompt(name: str, appearance: Optional[str], bio: Optional[str]) -> str:
+    """根据角色名、外貌、简介拼出肖像图 prompt（中文）。"""
+    parts = [f"角色肖像：{name}"]
+    if appearance and appearance.strip():
+        parts.append(appearance.strip())
+    if bio and bio.strip():
+        parts.append(bio.strip()[:200])
+    return "，".join(parts)
+
+
+async def generate_character_portrait(
+    name: str,
+    appearance: Optional[str] = None,
+    bio: Optional[str] = None,
+) -> Optional[str]:
+    """生成单张角色肖像图，返回 URL，失败返回 None。"""
+    if not settings.minimax_api_key:
+        logger.warning("MiniMax API Key not configured, skip character portrait")
+        return None
+    prompt_text = _build_character_portrait_prompt(name, appearance, bio)
+    prompt_text = f"{prompt_text}，{PORTRAIT_STYLE}".strip()
+    payload = {
+        "model": "image-01",
+        "prompt": prompt_text,
+        "aspect_ratio": "1:1",
+        "response_format": "url",
+        "n": 1,
+        "prompt_optimizer": True,
+    }
+    headers = {
+        "Authorization": f"Bearer {settings.minimax_api_key}",
+        "Content-Type": "application/json",
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(MINIMAX_IMAGE_API_URL, headers=headers, json=payload) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    logger.warning(
+                        "MiniMax character portrait failed status=%s err=%s",
+                        resp.status,
+                        error_text[:200],
+                    )
+                    return None
+                data = await resp.json()
+                return _extract_image_url(data)
+    except Exception:
+        logger.exception("Character portrait request exception")
+        return None

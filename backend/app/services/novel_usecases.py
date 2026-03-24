@@ -98,6 +98,44 @@ async def build_novel_export_payload(novel_id: str, db: AsyncSession) -> dict[st
     return {"content": full_text, "filename": filename}
 
 
+async def build_novel_settings_export_payload(novel_id: str, db: AsyncSession) -> dict[str, str]:
+    """Build plain-text export of characters + lore (设定集) for a novel."""
+    novel = await _get_novel_or_404(novel_id, db)
+
+    chars_result = await db.execute(
+        select(Character).where(Character.novel_id == novel_id)
+    )
+    lores_result = await db.execute(
+        select(Lore).where(Lore.novel_id == novel_id)
+    )
+    characters = chars_result.scalars().all()
+    lores = lores_result.scalars().all()
+
+    lines = [f"《{novel.title}》设定集", "", f"简介：{novel.premise or ''}", ""]
+    lines.append("=" * 30)
+    lines.append("角色")
+    lines.append("=" * 30)
+    for c in characters:
+        lines.append(f"\n【{c.name}】 {c.role or ''}")
+        if c.bio:
+            lines.append(f"  传记：{c.bio}")
+        if c.personality:
+            lines.append(f"  性格：{c.personality}")
+        if c.appearance:
+            lines.append(f"  外貌：{c.appearance}")
+    lines.append("")
+    lines.append("=" * 30)
+    lines.append("世界观")
+    lines.append("=" * 30)
+    for l in lores:
+        lines.append(f"\n【{l.title}】 {l.category or ''}")
+        if l.content:
+            lines.append(l.content)
+    text = "\n".join(lines)
+    filename = quote(f"{novel.title}_设定集.txt")
+    return {"content": text, "filename": filename}
+
+
 async def generate_novel_outline_for_novel(
     novel_id: str,
     premise: str,

@@ -30,3 +30,15 @@ async def init_db():
         # Enable WAL mode for better concurrency
         await conn.execute(sqlalchemy.text("PRAGMA journal_mode=WAL;"))
         await conn.run_sync(Base.metadata.create_all)
+        # 若使用 SQLite 且表已存在，补充新列（无则忽略）
+        if "sqlite" in DATABASE_URL:
+            for col_sql in (
+                "ALTER TABLE characters ADD COLUMN portrait_url VARCHAR(512)",
+                "ALTER TABLE scenes ADD COLUMN video_task_id VARCHAR(128)",
+                "ALTER TABLE scenes ADD COLUMN video_url VARCHAR(512)",
+                "ALTER TABLE scenes ADD COLUMN video_prompt TEXT",
+            ):
+                try:
+                    await conn.execute(sqlalchemy.text(col_sql))
+                except Exception:
+                    pass

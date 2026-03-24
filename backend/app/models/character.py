@@ -16,6 +16,7 @@ class Character(Base):
     appearance = Column(Text, nullable=True)  # 外貌描写
     role = Column(String(50), nullable=True)  # 主角/配角/反派等
     power_state = Column(JSON, nullable=True)  # 力量体系与资产状态机
+    portrait_url = Column(String(512), nullable=True)  # 角色肖像图 URL（AI 生成）
 
     def __repr__(self):
         return f"<Character {self.name}>"

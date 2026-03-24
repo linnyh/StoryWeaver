@@ -43,4 +43,5 @@ jobs:
             test_chapter_usecases_unittest.py \
             test_novel_usecases_unittest.py \
             test_api_integration_unittest.py \
-            test_rag_novel_isolation.py
+            test_rag_novel_isolation.py \
+            test_scene_sse_and_versions.py

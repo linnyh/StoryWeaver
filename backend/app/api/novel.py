@@ -9,6 +9,7 @@ from app.database import get_db
 from app.models import Novel, Relationship, Chapter, Scene
 from app.services.novel_usecases import (
     build_novel_export_payload,
+    build_novel_settings_export_payload,
     delete_rag_summary_for_novel,
     generate_novel_outline_for_novel,
     get_rag_summaries_for_novel,
@@ -159,16 +160,25 @@ async def delete_novel(novel_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{novel_id}/export")
 async def export_novel(novel_id: str, db: AsyncSession = Depends(get_db)):
-    """导出小说全文"""
+    """导出小说全文（TXT）"""
     from fastapi.responses import Response
     payload = await build_novel_export_payload(novel_id, db)
-    
     return Response(
         content=payload["content"],
         media_type="text/plain",
-        headers={
-            "Content-Disposition": f"attachment; filename*=utf-8''{payload['filename']}"
-        }
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{payload['filename']}"},
+    )
+
+
+@router.get("/{novel_id}/export_settings")
+async def export_novel_settings(novel_id: str, db: AsyncSession = Depends(get_db)):
+    """导出设定集（角色+世界观，TXT）"""
+    from fastapi.responses import Response
+    payload = await build_novel_settings_export_payload(novel_id, db)
+    return Response(
+        content=payload["content"],
+        media_type="text/plain",
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{payload['filename']}"},
     )
 
 

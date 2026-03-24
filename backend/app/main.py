@@ -18,7 +18,7 @@ from app.errors import (
     validation_exception_handler,
 )
 from app.logging import reset_request_id, set_request_id, setup_logging
-from app.models import Lore, SystemConfig  # 导入模型以创建数据库表
+from app.models import Lore, SystemConfig, SceneVersion  # 导入模型以创建数据库表
 from app.database import init_db
 
 setup_logging()

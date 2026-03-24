@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any
 from app.database import get_db
 from app.models import Character
 from app.services import state_analyzer
+from app.services.scene_image_service import generate_character_portrait
 
 router = APIRouter()
 
@@ -28,6 +29,7 @@ class CharacterUpdate(BaseModel):
     appearance: Optional[str] = None
     role: Optional[str] = None
     power_state: Optional[Dict[str, Any]] = None
+    portrait_url: Optional[str] = None
 
 
 class CharacterResponse(BaseModel):
@@ -39,6 +41,7 @@ class CharacterResponse(BaseModel):
     appearance: Optional[str]
     role: Optional[str]
     power_state: Optional[Dict[str, Any]]
+    portrait_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -46,6 +49,26 @@ class CharacterResponse(BaseModel):
 
 class StateUpdateRequest(BaseModel):
     text: str
+
+
+@router.post("/{character_id}/generate_portrait", response_model=CharacterResponse)
+async def generate_portrait(character_id: str, db: AsyncSession = Depends(get_db)):
+    """生成角色肖像并保存到角色卡片。"""
+    result = await db.execute(select(Character).where(Character.id == character_id))
+    character = result.scalar_one_or_none()
+    if not character:
+        raise HTTPException(status_code=404, detail="Character not found")
+    url = await generate_character_portrait(
+        name=character.name,
+        appearance=character.appearance,
+        bio=character.bio,
+    )
+    if not url:
+        raise HTTPException(status_code=502, detail="Portrait generation failed (check MiniMax API key or try again)")
+    character.portrait_url = url
+    await db.commit()
+    await db.refresh(character)
+    return character
 
 
 @router.post("/{character_id}/state_update", response_model=CharacterResponse)
