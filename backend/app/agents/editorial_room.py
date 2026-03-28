@@ -216,12 +216,10 @@ async def revision_node(state: EditorialState):
 def decision_node(state: EditorialState):
     iteration = state["iteration_count"]
     scores = state["scores"]
-    
+
     # Get last 3 scores
     current_scores = scores[-3:] if scores else []
-    
-    print(f"DEBUG: Iteration {iteration}, Scores: {current_scores}")
-    
+
     # Check max retries (2 retries = max iteration 2?)
     # Initial draft (iter 0) -> Critique -> Decision (iter 0) -> Revision -> iter 1
     # Rev 1 -> Critique -> Decision (iter 1) -> Revision -> iter 2

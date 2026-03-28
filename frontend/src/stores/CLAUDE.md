@@ -36,6 +36,9 @@ state: () => ({
   // 关系列表
   relationships: [],
 
+  // 世界观列表
+  lores: [],
+
   // 当前章节
   currentChapter: null,
 
@@ -44,12 +47,6 @@ state: () => ({
 
   // 当前场景
   currentScene: null,
-
-  // 加载状态
-  loading: false,
-
-  // 错误信息
-  error: null
 })
 ```
 
@@ -57,70 +54,46 @@ state: () => ({
 
 ```javascript
 // 小说操作
-async fetchNovel(id)
-async createNovel(data)
-async updateNovel(id, data)
-async deleteNovel(id)
+async loadNovel(id)                    // 加载小说
+async createNovel(data)                 // 创建小说
 
 // 章节操作
-async fetchChapters(novelId)
-async createChapter(data)
-async updateChapter(id, data)
-async deleteChapter(id)
+async loadChapters(novelId)            // 加载章节列表
 
 // 角色操作
-async fetchCharacters(novelId)
-async createCharacter(data)
-async updateCharacter(id, data)
-async deleteCharacter(id)
-async generatePortrait(characterId)
-
-// 场景操作
-async fetchScenes(chapterId)
-async createScene(data)
-async updateScene(id, data)
-async deleteScene(id)
-async generateSceneContent(sceneId, onChunk, onDone)
-async generateSceneImage(sceneId)
+async loadCharacters(novelId)          // 加载角色列表
 
 // 关系操作
-async fetchRelationships(novelId)
+async loadRelationships(novelId)       // 加载关系列表
+
+// 世界观操作
+async loadLores(novelId)               // 加载世界观列表
+
+// 场景操作
+async loadScenes(chapterId)            // 加载场景列表
+async updateScene(sceneId, data)       // 更新场景内容
+
+// 生成操作
+async generateOutline(novelId, data)   // 生成大纲
+async generateBeats(chapterId, data)   // 生成场景细纲
+async summarizeChapter(chapterId)       // 生成章节摘要
+
+// 导出
+async exportNovel(novelId)             // 导出小说
+
+// 状态管理
+function reset()                        // 重置所有状态
 ```
 
-### Getters
-
-```javascript
-// 按角色 ID 查找角色
-getCharacterById: (state) => (id) => {
-  return state.characters.find(c => c.id === id)
-}
-
-// 按章节 ID 查找章节
-getChapterById: (state) => (id) => {
-  return state.chapters.find(c => c.id === id)
-}
-
-// 小说统计
-novelStats: (state) => {
-  return {
-    chapterCount: state.chapters.length,
-    characterCount: state.characters.length,
-    sceneCount: state.scenes.length
-  }
-}
-```
-
----
-
-## 使用示例
+### 使用示例
 
 ```javascript
 import { useNovelStore } from '@/stores/novel'
 
 const store = useNovelStore()
 
-// 获取小说
-await store.fetchNovel('xxx')
+// 加载小说
+await store.loadNovel('xxx')
 
 // 创建章节
 await store.createChapter({
@@ -156,7 +129,7 @@ import { storeToRefs } from 'pinia'
 import { useNovelStore } from '@/stores/novel'
 
 const store = useNovelStore()
-const { currentNovel, loading } = storeToRefs(store)
+const { currentNovel, chapters } = storeToRefs(store)
 ```
 
 ---
@@ -165,12 +138,16 @@ const { currentNovel, loading } = storeToRefs(store)
 
 | 文件 | 说明 |
 |------|------|
-| `novel.js` | 小说状态管理 (~300 行) |
+| `novel.js` | 小说状态管理 |
 | `../api/index.js` | API 调用封装 |
 | `../views/WriterPage.vue` | 主要使用方 |
+| `../views/NovelPage.vue` | 小说详情页使用方 |
 
 ---
 
 ## 变更记录
 
 - **2026-03-24**: 初始化文档
+- **2026-03-28**: 修复文档与实现不一致问题（使用 load* 命名而非 fetch*）
+
+---
